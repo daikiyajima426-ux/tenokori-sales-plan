@@ -1,10 +1,20 @@
 import { APP_NAME, APP_VERSION, STORAGE_KEYS } from "@/lib/constants";
-import type { ExportData, Plan, SalesMethod, SalesPlanItem, Settings } from "@/types/domain";
+import type {
+  AllocationItem,
+  ExportData,
+  HarvestInput,
+  Plan,
+  ProductSpec,
+  Settings,
+  UnitDefinition
+} from "@/types/domain";
 
 type StoredState = {
   plan: Plan;
-  methods: SalesMethod[];
-  items: SalesPlanItem[];
+  units: UnitDefinition[];
+  harvests: HarvestInput[];
+  specs: ProductSpec[];
+  allocations: AllocationItem[];
   settings: Settings;
 };
 
@@ -23,32 +33,45 @@ export function loadJson<T>(key: string): { value?: T; error?: string } {
 
 export function saveState(state: StoredState) {
   localStorage.setItem(STORAGE_KEYS.plan, JSON.stringify(state.plan));
-  localStorage.setItem(STORAGE_KEYS.methods, JSON.stringify(state.methods));
-  localStorage.setItem(STORAGE_KEYS.items, JSON.stringify(state.items));
+  localStorage.setItem(STORAGE_KEYS.units, JSON.stringify(state.units));
+  localStorage.setItem(STORAGE_KEYS.harvests, JSON.stringify(state.harvests));
+  localStorage.setItem(STORAGE_KEYS.specs, JSON.stringify(state.specs));
+  localStorage.setItem(
+    STORAGE_KEYS.allocations,
+    JSON.stringify(state.allocations)
+  );
   localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(state.settings));
 }
 
 export function buildExportData(
   plan: Plan,
-  salesMethods: SalesMethod[],
-  salesPlanItems: SalesPlanItem[]
+  unitDefinitions: UnitDefinition[],
+  harvestInputs: HarvestInput[],
+  productSpecs: ProductSpec[],
+  allocationItems: AllocationItem[]
 ): ExportData {
   return {
     appName: APP_NAME,
     appVersion: APP_VERSION,
     exportedAt: new Date().toISOString(),
     plan,
-    salesMethods,
-    salesPlanItems
+    unitDefinitions,
+    harvestInputs,
+    productSpecs,
+    allocationItems
   };
 }
 
-export function validateExportData(value: unknown): value is ExportData {
-  if (!isObject(value)) return false;
-  if (value.appName !== APP_NAME) return false;
-  if (![APP_VERSION, "0.1.0"].includes(String(value.appVersion))) return false;
-  if (!isObject(value.plan)) return false;
-  if (!Array.isArray(value.salesMethods)) return false;
-  if (!Array.isArray(value.salesPlanItems)) return false;
-  return typeof value.plan.id === "string" && typeof value.plan.cropName === "string";
+export function getImportValidationError(value: unknown) {
+  if (!isObject(value)) return "JSONの形式が正しくありません。";
+  if (value.appName !== APP_NAME) return "別アプリのJSONです。";
+  if (value.appVersion !== APP_VERSION) {
+    return "このデータは旧形式です。v0.2.0では自動変換しません。";
+  }
+  if (!isObject(value.plan)) return "planが見つかりません。";
+  if (!Array.isArray(value.unitDefinitions)) return "unitDefinitionsが見つかりません。";
+  if (!Array.isArray(value.harvestInputs)) return "harvestInputsが見つかりません。";
+  if (!Array.isArray(value.productSpecs)) return "productSpecsが見つかりません。";
+  if (!Array.isArray(value.allocationItems)) return "allocationItemsが見つかりません。";
+  return "";
 }

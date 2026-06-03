@@ -1,101 +1,165 @@
-import type { Plan, SalesMethod, SalesPlanItem } from "@/types/domain";
+import type {
+  AllocationItem,
+  HarvestInput,
+  Plan,
+  ProductSpec,
+  UnitDefinition
+} from "@/types/domain";
 
 const safeNumber = (value: number | undefined | null) =>
   Number.isFinite(value) ? Number(value) : 0;
 
 const safeDivide = (a: number, b: number) => (b > 0 ? a / b : 0);
 
-export function calculateSaleableKg(expectedYieldKg: number, nonSaleKg: number) {
-  return Math.max(0, safeNumber(expectedYieldKg) - safeNumber(nonSaleKg));
+export function calculateUnitQuantityKg(
+  quantity: number,
+  unit?: UnitDefinition
+) {
+  return safeNumber(quantity) * safeNumber(unit?.weightKg);
 }
 
-export function calculateMethod(method: SalesMethod) {
-  const weightPerUnitKg = safeNumber(method.weightPerUnitKg);
-  const pricePerUnitYen = safeNumber(method.pricePerUnitYen);
-  const costPerUnitYen =
-    safeNumber(method.packagingCostPerUnitYen) +
-    safeNumber(method.shippingCostPerUnitYen) +
-    safeNumber(method.feePerUnitYen) +
-    safeNumber(method.otherCostPerUnitYen);
-  const netPerUnitYen = pricePerUnitYen - costPerUnitYen;
+export function calculateHarvest(harvest: HarvestInput, unit?: UnitDefinition) {
+  return {
+    convertedKg: calculateUnitQuantityKg(harvest.quantity, unit),
+    missingUnitWeight: !unit || safeNumber(unit.weightKg) <= 0
+  };
+}
+
+export function calculateSpec(spec: ProductSpec, unit?: UnitDefinition) {
+  const quantityPerSpec = safeNumber(spec.quantityPerSpec);
+  const usageKg =
+    spec.type === "weight"
+      ? quantityPerSpec
+      : quantityPerSpec * safeNumber(unit?.weightKg);
+  const costPerSpecYen =
+    safeNumber(spec.packagingCostPerSpecYen) +
+    safeNumber(spec.shippingCostPerSpecYen) +
+    safeNumber(spec.feePerSpecYen) +
+    safeNumber(spec.otherCostPerSpecYen);
+  const netPerSpecYen = safeNumber(spec.pricePerSpecYen) - costPerSpecYen;
 
   return {
-    kgPriceYen: safeDivide(pricePerUnitYen, weightPerUnitKg),
-    costPerUnitYen,
-    netPerUnitYen,
-    kgNetYen: safeDivide(netPerUnitYen, weightPerUnitKg),
+    usageKg,
+    costPerSpecYen,
+    netPerSpecYen,
+    kgNetYen: safeDivide(netPerSpecYen, usageKg),
     warnings: {
-      missingWeight: weightPerUnitKg <= 0,
-      missingPrice: pricePerUnitYen <= 0,
-      negativeNet: netPerUnitYen < 0
+      missingUsage: usageKg <= 0,
+      missingPrice: safeNumber(spec.pricePerSpecYen) <= 0,
+      negativeNet: netPerSpecYen < 0
     }
   };
 }
 
-export function calculateItem(item: SalesPlanItem, method?: SalesMethod) {
-  if (!method) {
+export function calculateAllocation(
+  allocation: AllocationItem,
+  spec?: ProductSpec,
+  unit?: UnitDefinition
+) {
+  if (!spec) {
     return {
-      convertedKg: 0,
+      count: 0,
+      inputWeightKg: safeNumber(allocation.inputWeightKg),
+      usedKg: 0,
+      remainderKg: 0,
       salesTotalYen: 0,
-      netTotalYen: 0
+      netTotalYen: 0,
+      hasRemainder: false
     };
   }
 
-  const methodResult = calculateMethod(method);
-  const quantity = safeNumber(item.quantity);
+  const specResult = calculateSpec(spec, unit);
+  const usageKg = specResult.usageKg;
+  const count =
+    allocation.inputMode === "weight"
+      ? Math.floor(safeDivide(safeNumber(allocation.inputWeightKg), usageKg))
+      : safeNumber(allocation.count);
+  const usedKg = count * usageKg;
+  const inputWeightKg =
+    allocation.inputMode === "weight"
+      ? safeNumber(allocation.inputWeightKg)
+      : usedKg;
+  const remainderKg =
+    allocation.inputMode === "weight" ? Math.max(0, inputWeightKg - usedKg) : 0;
 
   return {
-    convertedKg: quantity * safeNumber(method.weightPerUnitKg),
-    salesTotalYen: quantity * safeNumber(method.pricePerUnitYen),
-    netTotalYen: quantity * methodResult.netPerUnitYen
+    count,
+    inputWeightKg,
+    usedKg,
+    remainderKg,
+    salesTotalYen: count * safeNumber(spec.pricePerSpecYen),
+    netTotalYen: count * specResult.netPerSpecYen,
+    hasRemainder: remainderKg > 0
   };
 }
 
 export function calculateSummary(
   plan: Plan,
-  methods: SalesMethod[],
-  items: SalesPlanItem[]
+  units: UnitDefinition[],
+  harvests: HarvestInput[],
+  specs: ProductSpec[],
+  allocations: AllocationItem[]
 ) {
-  const methodMap = new Map(methods.map((method) => [method.id, method]));
-  const itemResults = items.map((item) => ({
-    item,
-    method: methodMap.get(item.salesMethodId),
-    result: calculateItem(item, methodMap.get(item.salesMethodId))
+  const unitMap = new Map(units.map((unit) => [unit.id, unit]));
+  const specMap = new Map(specs.map((spec) => [spec.id, spec]));
+  const harvestResults = harvests.map((harvest) => ({
+    harvest,
+    unit: unitMap.get(harvest.unitId),
+    result: calculateHarvest(harvest, unitMap.get(harvest.unitId))
   }));
+  const specResults = specs.map((spec) => ({
+    spec,
+    unit: unitMap.get(spec.unitId),
+    result: calculateSpec(spec, unitMap.get(spec.unitId))
+  }));
+  const allocationResults = allocations.map((allocation) => {
+    const spec = specMap.get(allocation.productSpecId);
+    return {
+      allocation,
+      spec,
+      unit: spec ? unitMap.get(spec.unitId) : undefined,
+      result: calculateAllocation(
+        allocation,
+        spec,
+        spec ? unitMap.get(spec.unitId) : undefined
+      )
+    };
+  });
 
-  const allocatedKg = itemResults.reduce(
+  const harvestTotalKg = harvestResults.reduce(
     (sum, row) => sum + row.result.convertedKg,
     0
   );
-  const totalSalesYen = itemResults.reduce(
+  const productizedKg = allocationResults.reduce(
+    (sum, row) => sum + row.result.usedKg,
+    0
+  );
+  const unproductizedKg = harvestTotalKg - productizedKg;
+  const totalSalesYen = allocationResults.reduce(
     (sum, row) => sum + row.result.salesTotalYen,
     0
   );
-  const totalNetYen = itemResults.reduce(
+  const totalNetYen = allocationResults.reduce(
     (sum, row) => sum + row.result.netTotalYen,
     0
   );
-  const saleableKg = safeNumber(plan.saleableKg);
-  const requiredCashYen = safeNumber(plan.requiredCashYen);
-  const unallocatedKg = saleableKg - allocatedKg;
 
   return {
-    saleableKg,
-    allocatedKg,
-    unallocatedKg,
+    harvestTotalKg,
+    productizedKg,
+    unproductizedKg,
     totalSalesYen,
     totalNetYen,
-    requiredCashYen,
-    requiredCashGapYen: totalNetYen - requiredCashYen,
-    averageKgPriceYen: safeDivide(totalSalesYen, allocatedKg),
-    averageKgNetYen: safeDivide(totalNetYen, allocatedKg),
-    hasOverAllocated: allocatedKg > saleableKg,
-    hasUnallocated: unallocatedKg > 0,
-    hasNegativeMethod: methods.some(
-      (method) => calculateMethod(method).warnings.negativeNet
-    ),
-    isCashEnough: totalNetYen >= requiredCashYen,
-    itemResults
+    requiredCashYen: safeNumber(plan.requiredCashYen),
+    requiredCashGapYen: totalNetYen - safeNumber(plan.requiredCashYen),
+    averageKgNetYen: safeDivide(totalNetYen, productizedKg),
+    hasOverProductized: productizedKg > harvestTotalKg,
+    hasUnproductized: unproductizedKg > 0,
+    isCashEnough: totalNetYen >= safeNumber(plan.requiredCashYen),
+    hasNegativeSpec: specResults.some((row) => row.result.warnings.negativeNet),
+    hasRemainder: allocationResults.some((row) => row.result.hasRemainder),
+    harvestResults,
+    specResults,
+    allocationResults
   };
 }
-
