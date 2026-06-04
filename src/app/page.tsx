@@ -386,6 +386,7 @@ export default function Home() {
             setCards={setSalesPlanCards}
             harvestCards={harvestCards}
             productCards={productCards}
+            stockWarnings={summary.stockWarnings}
             openCards={openCards}
             toggleCard={toggleCard}
             closeCard={closeCard}
@@ -608,6 +609,7 @@ function SalesPlanCardsTab({
   setCards,
   harvestCards,
   productCards,
+  stockWarnings,
   openCards,
   toggleCard,
   closeCard,
@@ -617,6 +619,7 @@ function SalesPlanCardsTab({
   setCards: React.Dispatch<React.SetStateAction<SalesPlanCard[]>>;
   harvestCards: HarvestCard[];
   productCards: ProductCard[];
+  stockWarnings: string[];
   openCards: Record<string, boolean>;
   toggleCard: (id: string) => void;
   closeCard: (id: string) => void;
@@ -636,6 +639,7 @@ function SalesPlanCardsTab({
         <button className={primaryButton} onClick={() => setCards((current) => [...current, createSalesPlanCard(current.length + 1)])}>販売計画を追加</button>
       </div>
       {cards.length === 0 ? <Notice>販売計画：未入力。売り方をカードで追加してください。</Notice> : null}
+      {stockWarnings.map((message) => <Notice key={message}>{message}</Notice>)}
       {cards.map((card, index) => {
         const product = productMap.get(card.productId ?? "");
         const harvest = harvestMap.get(card.harvestId ?? "");
