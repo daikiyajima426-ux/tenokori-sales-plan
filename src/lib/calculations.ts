@@ -257,6 +257,7 @@ export function priceSliderMax() {
 
 export function priceSliderStep(pricePerUnit: number) {
   const price = safeNumber(pricePerUnit);
+  if (price >= 30000) return 10000;
   if (price > 10000) return 1000;
   if (price > 1000) return 100;
   return 10;
