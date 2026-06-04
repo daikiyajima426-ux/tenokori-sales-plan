@@ -599,7 +599,7 @@ function ProductCardsTab({
           </label>
         </CardShell>
       ))}
-      <button className={secondaryButton} onClick={() => setActiveTab("trials")}>試すへ進む</button>
+      <button className={secondaryButton} onClick={() => setActiveTab("trials")}>販売計画へ進む</button>
     </div>
   );
 }

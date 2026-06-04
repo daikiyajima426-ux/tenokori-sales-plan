@@ -16,6 +16,6 @@ export const TABS = [
   { id: "goal", label: "目標" },
   { id: "harvests", label: "取れた量" },
   { id: "products", label: "売る形" },
-  { id: "trials", label: "試す" },
+  { id: "trials", label: "販売計画" },
   { id: "result", label: "結果" }
 ] as const;
