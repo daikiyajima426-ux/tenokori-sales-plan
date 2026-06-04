@@ -681,8 +681,9 @@ function SalesPlanCardsTab({
         const roleLabel = PRODUCT_ROLE_LABELS[card.productRole ?? "unset"];
         const plannedUnits = Number.isFinite(card.plannedUnits) ? card.plannedUnits : 0;
         const currentPrice = Number.isFinite(card.pricePerUnit) ? card.pricePerUnit : 0;
-        const sliderMax = priceSliderMax(currentPrice);
-        const sliderStep = priceSliderStep(sliderMax);
+        const sliderMax = priceSliderMax();
+        const sliderStep = priceSliderStep(currentPrice);
+        const isManualHighPrice = currentPrice > sliderMax;
         const otherCardsSalesYen = summary.validResults
           .filter((row) => row.card.id !== card.id)
           .reduce((sum, row) => sum + row.salesYen, 0);
@@ -762,6 +763,9 @@ function SalesPlanCardsTab({
                   value={Math.min(currentPrice, sliderMax)}
                   onChange={(event) => updateCard(card.id, { pricePerUnit: Number(event.target.value) })}
                 />
+                {isManualHighPrice ? (
+                  <p className="mt-2 text-xs font-semibold text-amber-700">10万円を超える価格は手入力で扱っています。</p>
+                ) : null}
                 <div className="mt-1 flex items-center justify-between text-xs font-bold text-stone-500">
                   <span>0円</span>
                   <span>{yen(sliderMax)}</span>

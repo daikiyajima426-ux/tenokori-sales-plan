@@ -251,15 +251,13 @@ export function referencePriceForSalesPlan(
   return Math.ceil(neededSales / units);
 }
 
-export function priceSliderMax(pricePerUnit: number) {
-  const price = safeNumber(pricePerUnit);
-  const max = price > 0 ? price * 3 : 1000;
-  return Math.max(1000, Math.ceil(max / 10) * 10);
+export function priceSliderMax() {
+  return 100000;
 }
 
-export function priceSliderStep(maxPrice: number) {
-  const max = safeNumber(maxPrice);
-  if (max > 5000) return 100;
-  if (max > 1000) return 50;
+export function priceSliderStep(pricePerUnit: number) {
+  const price = safeNumber(pricePerUnit);
+  if (price > 10000) return 500;
+  if (price > 1000) return 50;
   return 10;
 }
