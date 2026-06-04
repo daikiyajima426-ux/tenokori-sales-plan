@@ -80,7 +80,6 @@ export function calculateSummary(
     (sum, card) => sum + safeNumber(card.amount),
     0
   );
-  const totalUsedKg = validResults.reduce((sum, row) => sum + row.usedKg, 0);
   const totalSalesYen = validResults.reduce((sum, row) => sum + row.salesYen, 0);
   const totalTakeHomeYen = validResults.reduce(
     (sum, row) => sum + row.takeHomeYen,
@@ -91,6 +90,8 @@ export function calculateSummary(
   const shortageYen = Math.max(0, targetCashYen - totalTakeHomeYen);
   const achievementRate = targetCashYen > 0 ? totalTakeHomeYen / targetCashYen : null;
   const stockCheckResults = salesResults.filter((row) => row.canCheckStock);
+  const totalUsedKg = stockCheckResults.reduce((sum, row) => sum + row.usedKg, 0);
+  const totalOverKg = Math.max(0, totalUsedKg - totalHarvestKg);
 
   const harvestUsage = harvestCards.map((harvest) => {
     const usedKg = stockCheckResults
@@ -109,6 +110,11 @@ export function calculateSummary(
       (row) =>
         `${row.harvest.name || "取れた量"}の販売予定量が、取れた量を${round(row.overKg)}kg上回っています。売る量を減らすか、取れた量を見直してください。`
     );
+  const globalStockWarnings =
+    totalOverKg > 0
+      ? [`販売予定量の合計が、取れた量の合計を${round(totalOverKg)}kg上回っています。売る量を減らすか、取れた量を見直してください。`]
+      : [];
+  const allStockWarnings = [...globalStockWarnings, ...stockWarnings];
 
   const missingItems = [
     targetCashYen <= 0 ? "目標：今年いくら手元に残したいかを入れてください。" : "",
@@ -140,10 +146,13 @@ export function calculateSummary(
     salesResults,
     validResults,
     harvestUsage,
-    stockWarnings,
+    stockWarnings: allStockWarnings,
+    harvestStockWarnings: stockWarnings,
+    globalStockWarnings,
     missingItems,
     hasMissingItems: missingItems.length > 0,
-    hasStockWarnings: stockWarnings.length > 0
+    hasStockWarnings: allStockWarnings.length > 0,
+    hasOverDecided: totalOverKg > 0
   };
 }
 

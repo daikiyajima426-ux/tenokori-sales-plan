@@ -351,6 +351,7 @@ export default function Home() {
       <div className="space-y-3">
         {messages.map((message) => <Notice key={message}>{message}</Notice>)}
         {saveMessage ? <Notice>{saveMessage}</Notice> : null}
+        {summary.stockWarnings.map((message) => <Notice key={`global-${message}`}>{message}</Notice>)}
       </div>
 
       <section className="mt-4">
@@ -748,6 +749,16 @@ function ResultTab({
           ) : null}
           {summary.stockWarnings.map((message) => <Notice key={message}>{message}</Notice>)}
           {summary.hasMissingItems ? <Notice>まだ決めていない項目があります。下の「次に決めること」で確認できます。</Notice> : null}
+        </div>
+      </div>
+      <div className={panelClass}>
+        <h3 className="text-lg font-black">在庫使用状況</h3>
+        <div className="mt-3 space-y-2">
+          {summary.harvestUsage.map((row) => (
+            <p key={row.harvest.id} className={`rounded-md border px-3 py-2 text-sm font-semibold ${row.hasOver ? "border-amber-200 bg-amber-50 text-amber-900" : "border-stone-200 bg-stone-50 text-stone-700"}`}>
+              {row.harvest.name || "取れた量"}：{kg(row.usedKg)} / {kg(row.harvest.amount)} 使用中{row.hasOver ? `、${kg(row.overKg)}超過` : ""}
+            </p>
+          ))}
         </div>
       </div>
       <div className={panelClass}>
