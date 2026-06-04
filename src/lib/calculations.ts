@@ -238,3 +238,28 @@ export function requiredPricePerUnit(
   const result = safeDivide(targetCashYen, plannedUnits);
   return result === null ? null : Math.ceil(result);
 }
+
+export function referencePriceForSalesPlan(
+  targetCashYen: number,
+  plannedUnits: number,
+  otherCardsSalesYen: number
+) {
+  const target = safeNumber(targetCashYen);
+  const units = safeNumber(plannedUnits);
+  if (target <= 0 || units <= 0) return null;
+  const neededSales = Math.max(0, target - safeNumber(otherCardsSalesYen));
+  return Math.ceil(neededSales / units);
+}
+
+export function priceSliderMax(pricePerUnit: number) {
+  const price = safeNumber(pricePerUnit);
+  const max = price > 0 ? price * 3 : 1000;
+  return Math.max(1000, Math.ceil(max / 10) * 10);
+}
+
+export function priceSliderStep(maxPrice: number) {
+  const max = safeNumber(maxPrice);
+  if (max > 5000) return 100;
+  if (max > 1000) return 50;
+  return 10;
+}

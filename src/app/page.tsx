@@ -12,7 +12,10 @@ import {
   calculateSalesPlan,
   calculateSummary,
   formatProductAmount,
+  priceSliderMax,
+  priceSliderStep,
   productUnitKg,
+  referencePriceForSalesPlan,
   requiredPricePerUnit,
   round
 } from "@/lib/calculations";
@@ -406,10 +409,12 @@ export default function Home() {
         ) : null}
         {activeTab === "trials" ? (
           <SalesPlanCardsTab
+            plan={plan}
             cards={salesPlanCards}
             setCards={setSalesPlanCards}
             harvestCards={harvestCards}
             productCards={productCards}
+            summary={summary}
             stockWarnings={summary.stockWarnings}
             openCards={openCards}
             toggleCard={toggleCard}
@@ -629,20 +634,24 @@ function ProductCardsTab({
 }
 
 function SalesPlanCardsTab({
+  plan,
   cards,
   setCards,
   harvestCards,
   productCards,
+  summary,
   stockWarnings,
   openCards,
   toggleCard,
   closeCard,
   setActiveTab
 }: {
+  plan: Plan;
   cards: SalesPlanCard[];
   setCards: React.Dispatch<React.SetStateAction<SalesPlanCard[]>>;
   harvestCards: HarvestCard[];
   productCards: ProductCard[];
+  summary: ReturnType<typeof calculateSummary>;
   stockWarnings: string[];
   openCards: Record<string, boolean>;
   toggleCard: (id: string) => void;
@@ -670,6 +679,25 @@ function SalesPlanCardsTab({
         const result = calculateSalesPlan(card, harvest, product);
         const missing = result.missing.length > 0;
         const roleLabel = PRODUCT_ROLE_LABELS[card.productRole ?? "unset"];
+        const plannedUnits = Number.isFinite(card.plannedUnits) ? card.plannedUnits : 0;
+        const currentPrice = Number.isFinite(card.pricePerUnit) ? card.pricePerUnit : 0;
+        const sliderMax = priceSliderMax(currentPrice);
+        const sliderStep = priceSliderStep(sliderMax);
+        const otherCardsSalesYen = summary.validResults
+          .filter((row) => row.card.id !== card.id)
+          .reduce((sum, row) => sum + row.salesYen, 0);
+        const referencePrice = referencePriceForSalesPlan(
+          plan.targetCashYen,
+          plannedUnits,
+          otherCardsSalesYen
+        );
+        const priceGap = referencePrice === null ? null : referencePrice - currentPrice;
+        const targetMessage =
+          plan.targetCashYen <= 0
+            ? "目標金額を入れると、全体目標との差が見えます。"
+            : summary.isTargetEnough
+              ? "今の全体計画なら、目標を達成できそうです。"
+              : `全体では目標まであと${yen(summary.shortageYen)}足りません。`;
         return (
           <CardShell
             key={card.id}
@@ -710,6 +738,75 @@ function SalesPlanCardsTab({
               </label>
               <NumberInput label="売値" unit="円" value={card.pricePerUnit} onChange={(pricePerUnit) => updateCard(card.id, { pricePerUnit })} placeholder="例：500" />
               <NumberInput label="販売予定数" unit={product?.unitName || "個"} value={card.plannedUnits} onChange={(plannedUnits) => updateCard(card.id, { plannedUnits })} placeholder="例：200" />
+              <div className="rounded-md border border-stone-200 bg-stone-50 p-3 md:col-span-2">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className={labelClass}>価格を動かして試す</p>
+                    <p className="text-xs font-semibold leading-5 text-stone-600">
+                      {product
+                        ? plannedUnits > 0
+                          ? "スライダーを動かすと、この販売計画と全体の見込みがすぐ変わります。"
+                          : "販売予定数を入れると、価格を動かしたときの目標差を確認できます。"
+                        : "売る形を選ぶと、使用量と販売見込みを確認できます。"}
+                    </p>
+                  </div>
+                  <p className="shrink-0 text-sm font-black text-stone-900">現在価格：{yen(currentPrice)}</p>
+                </div>
+                <input
+                  aria-label={`${card.name || `販売計画${index + 1}`}の価格スライダー`}
+                  className="mt-3 w-full accent-leaf"
+                  type="range"
+                  min={0}
+                  max={sliderMax}
+                  step={sliderStep}
+                  value={Math.min(currentPrice, sliderMax)}
+                  onChange={(event) => updateCard(card.id, { pricePerUnit: Number(event.target.value) })}
+                />
+                <div className="mt-1 flex items-center justify-between text-xs font-bold text-stone-500">
+                  <span>0円</span>
+                  <span>{yen(sliderMax)}</span>
+                </div>
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="rounded-md border border-stone-200 bg-white p-3">
+                    <p className="text-xs font-bold text-stone-500">このカードの販売見込み額</p>
+                    <p className="mt-1 text-lg font-black text-stone-950">
+                      {plannedUnits > 0 ? yen(result.salesYen) : "販売予定数が未入力"}
+                    </p>
+                    {plannedUnits <= 0 ? (
+                      <p className="mt-1 text-xs font-semibold text-stone-600">販売予定数を入れると、このカードの販売見込み額を確認できます。</p>
+                    ) : null}
+                  </div>
+                  <div className="rounded-md border border-leaf/30 bg-leaf/5 p-3">
+                    <p className="text-xs font-bold text-leaf">全体の目標差</p>
+                    <p className="mt-1 text-sm font-black leading-6 text-stone-900">{targetMessage}</p>
+                  </div>
+                </div>
+                <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm font-semibold leading-6 text-stone-800">
+                  {plan.targetCashYen <= 0 ? (
+                    <p>目標金額を入れると、目標到達の参考価格を確認できます。</p>
+                  ) : plannedUnits <= 0 ? (
+                    <p>販売予定数を入れると、目標到達の参考価格を確認できます。</p>
+                  ) : referencePrice === null ? (
+                    <p>目標金額と販売予定数を入れると、参考価格を確認できます。</p>
+                  ) : (
+                    <>
+                      <p>このカードだけで目標に近づけるなら、1単位あたり約{yen(referencePrice)}が目安です。</p>
+                      <div className="mt-2 grid grid-cols-1 gap-1 text-xs sm:grid-cols-3">
+                        <span>現在価格：{yen(currentPrice)}</span>
+                        <span>目標到達の参考価格：約{yen(referencePrice)}</span>
+                        <span>差：{priceGap !== null && priceGap > 0 ? `+${yen(priceGap)}` : yen(priceGap ?? 0)}</span>
+                      </div>
+                      <p className="mt-2 text-xs">
+                        {summary.isTargetEnough
+                          ? "今の価格でも目標に届く見込みです。"
+                          : priceGap !== null && priceGap > 0
+                            ? `あと${yen(priceGap)}上げると、全体目標に近づく目安です。`
+                            : "このカードの価格は、目標到達の参考価格を上回っています。"}
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
             <label className="block">
               <span className={labelClass}>メモ</span>
@@ -879,7 +976,7 @@ function buildTextOutput(
   const summary = calculateSummary(plan, harvestCards, productCards, salesPlanCards);
   const productMap = new Map(productCards.map((card) => [card.id, card]));
   const lines = [
-    "農産物販売プランナー v1.2.1",
+    "農産物販売プランナー v1.2.2",
     "",
     `作物名: ${plan.cropName || "未入力"}`,
     `目標手残り: ${yen(plan.targetCashYen)}`,

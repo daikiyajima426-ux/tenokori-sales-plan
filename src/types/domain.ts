@@ -68,7 +68,7 @@ export type AppData = {
 
 export type ExportData = {
   appName: "農産物販売プランナー";
-  appVersion: "1.2.1";
+  appVersion: "1.2.2";
   exportedAt: string;
   data: AppData;
 };
