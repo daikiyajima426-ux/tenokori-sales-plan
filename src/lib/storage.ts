@@ -19,7 +19,10 @@ export function loadJson<T>(key: string): { value?: T; error?: string } {
     if (!raw) return {};
     return { value: JSON.parse(raw) as T };
   } catch {
-    return { error: `${key} の読み込みに失敗しました` };
+    return {
+      error:
+        "このデータは読み込めません。保存形式が違うか、内容が壊れている可能性があります。"
+    };
   }
 }
 
@@ -52,13 +55,25 @@ export function buildExportData(
 }
 
 export function getImportValidationError(value: unknown) {
-  if (!isObject(value)) return "JSONの形式が正しくありません。";
+  if (!isObject(value)) {
+    return "このデータは読み込めません。保存形式が違うか、内容が壊れている可能性があります。";
+  }
   if (value.appName !== APP_NAME) return "別アプリのJSONです。";
   if (value.appVersion !== APP_VERSION) return "このデータは旧形式です。";
-  if (!isObject(value.plan)) return "planが見つかりません。";
-  if (!Array.isArray(value.units)) return "unitsが見つかりません。";
-  if (!Array.isArray(value.harvests)) return "harvestsが見つかりません。";
-  if (!Array.isArray(value.products)) return "productsが見つかりません。";
-  if (!Array.isArray(value.trials)) return "trialsが見つかりません。";
+  if (!isObject(value.plan)) {
+    return "このデータは読み込めません。保存形式が違うか、内容が壊れている可能性があります。";
+  }
+  if (!Array.isArray(value.units)) {
+    return "このデータは読み込めません。保存形式が違うか、内容が壊れている可能性があります。";
+  }
+  if (!Array.isArray(value.harvests)) {
+    return "このデータは読み込めません。保存形式が違うか、内容が壊れている可能性があります。";
+  }
+  if (!Array.isArray(value.products)) {
+    return "このデータは読み込めません。保存形式が違うか、内容が壊れている可能性があります。";
+  }
+  if (!Array.isArray(value.trials)) {
+    return "このデータは読み込めません。保存形式が違うか、内容が壊れている可能性があります。";
+  }
   return "";
 }

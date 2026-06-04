@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "手残り販売計画",
-  description: "今年いくら手元に残したいかから、売り方を考える農家向け販売計画アプリ。",
+  description: "今の条件で目標に届くかを試せる農家向け販売計画シミュレーター。",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

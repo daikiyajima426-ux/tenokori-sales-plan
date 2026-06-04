@@ -1,7 +1,7 @@
 import type { ProductCategory } from "@/types/domain";
 
 export const APP_NAME = "手残り販売計画";
-export const APP_VERSION = "1.0.0";
+export const APP_VERSION = "1.1.0";
 export const SCHEMA_VERSION = 4;
 
 export const STORAGE_KEYS = {

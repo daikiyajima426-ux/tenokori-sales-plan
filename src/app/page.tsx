@@ -145,6 +145,17 @@ function Warning({ children }: { children: React.ReactNode }) {
   );
 }
 
+function Notice({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
+      {children}
+    </p>
+  );
+}
+
+const percent = (value: number | null) =>
+  value === null ? "未設定" : `${Math.round(value * 100).toLocaleString("ja-JP")}%`;
+
 export default function Home() {
   const [plan, setPlan] = useState<Plan>(() => createEmptyPlan());
   const [units, setUnits] = useState<Unit[]>(() => [createKgUnit()]);
@@ -218,7 +229,7 @@ export default function Home() {
       saveState({ plan, units, harvests, products, trials, settings });
       setSaveError("");
     } catch {
-      setSaveError("保存に失敗しました。ブラウザの保存容量や設定を確認してください。");
+      setSaveError("このデータは保存できません。ブラウザの保存容量や設定を確認してください。");
     }
   }, [plan, units, harvests, products, trials, settings]);
 
@@ -236,7 +247,7 @@ export default function Home() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `tenokori-sales-plan-v100-${new Date()
+    link.download = `tenokori-sales-plan-v110-${new Date()
       .toISOString()
       .slice(0, 10)}.json`;
     link.click();
@@ -263,7 +274,7 @@ export default function Home() {
       setTrials(data.trials);
       setImportMessage("JSONを読み込みました。");
     } catch {
-      setImportMessage("JSONの読み込みに失敗しました。");
+      setImportMessage("このデータは読み込めません。保存形式が違うか、内容が壊れている可能性があります。");
     }
   };
 
@@ -324,12 +335,12 @@ export default function Home() {
           <Warning key={error}>{error}</Warning>
         ))}
         {saveError ? <Warning>{saveError}</Warning> : null}
-        {summary.hasOverDecided ? <Warning>取れた量を超えています</Warning> : null}
+        {summary.hasOverDecided ? <Notice>取れた量を超えています。売る量を少し下げるか、取れそうな量を見直してください。</Notice> : null}
         {!summary.isTargetEnough && plan.targetCashYen > 0 ? (
-          <Warning>目標まであと{yen(Math.abs(summary.targetGapYen))}足りません</Warning>
+          <Notice>今の条件では目標まであと{yen(summary.shortageYen)}足りません。</Notice>
         ) : null}
         {summary.hasNegativeProduct ? (
-          <Warning>費用が売値を上回っている売り方があります</Warning>
+          <Notice>費用が売値を上回っている売り方があります。売るほど手元に残るお金が減る可能性があります。</Notice>
         ) : null}
       </div>
 
@@ -527,7 +538,7 @@ function HarvestTab({
                   onChange={(weightKg) => updateUnit(unit.id, { weightKg })}
                 />
               </div>
-              {unit.weightKg <= 0 ? <div className="mt-3"><Warning>1つあたりの重さを入力してください</Warning></div> : null}
+              {unit.weightKg <= 0 ? <div className="mt-3"><Notice>1つあたりの重さを入れると、kgで比べられます。</Notice></div> : null}
             </article>
           ))}
         </div>
@@ -569,7 +580,7 @@ function HarvestTab({
             <div className="mt-4">
               <Metric label="kgで見ると" value={`${round(harvest.quantity).toLocaleString("ja-JP")}${unit?.name || ""} = 約${kg(result.convertedKg)}`} strong />
             </div>
-            {result.missingUnitWeight ? <div className="mt-3"><Warning>1つあたりの重さを入力してください</Warning></div> : null}
+            {result.missingUnitWeight ? <div className="mt-3"><Notice>1つあたりの重さを入れると、kgで比べられます。</Notice></div> : null}
           </article>
         );
       })}
@@ -651,9 +662,9 @@ function ProductsTab({
               <Metric label="1kgあたりでは" value={`約${perKg(result.kgMoneyLeftYen)}残ります`} strong />
             </div>
             <div className="mt-3 space-y-2">
-              {result.warnings.missingContent ? <Warning>1つあたりの重さを入力してください</Warning> : null}
-              {result.warnings.missingPrice ? <Warning>売値を入力してください</Warning> : null}
-              {result.warnings.negativeMoneyLeft ? <Warning>この売り方は、費用が売値を上回っています</Warning> : null}
+              {result.warnings.missingContent ? <Notice>1つあたりの重さを入れると、kgで比べられます。</Notice> : null}
+              {result.warnings.missingPrice ? <Notice>売値を入れると、目標との差が分かります。</Notice> : null}
+              {result.warnings.negativeMoneyLeft ? <Notice>この売り方は、費用が売値を上回っています。</Notice> : null}
             </div>
           </article>
         );
@@ -697,10 +708,17 @@ function TrialsTab({
   return (
     <div className="space-y-4">
       <div className="sticky top-[57px] z-10 -mx-4 grid grid-cols-2 gap-2 border-y border-stone-200 bg-paper/95 p-4 backdrop-blur sm:top-[65px] sm:mx-0 sm:rounded-lg sm:border lg:grid-cols-4">
-        <Metric label="手元に残るお金" value={yen(summary.totalMoneyLeftYen)} strong />
+        <Metric label="見込み手残り" value={yen(summary.totalMoneyLeftYen)} strong />
         <Metric label="目標との差" value={yen(summary.targetGapYen)} strong />
-        <Metric label="売る形が決まった量" value={kg(summary.decidedKg)} />
-        <Metric label="まだ売り方が決まっていない量" value={kg(summary.undecidedKg)} />
+        <Metric label="達成率" value={percent(summary.achievementRate)} />
+        <Metric
+          label="必要単価の目安"
+          value={
+            summary.requiredPricePerKg === null
+              ? "未設定"
+              : perKg(summary.requiredPricePerKg)
+          }
+        />
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-black">売り方を試す</h2>
@@ -708,7 +726,7 @@ function TrialsTab({
           試す行を追加
         </button>
       </div>
-      {products.length === 0 ? <Warning>先に売る形を登録してください。</Warning> : null}
+      {products.length === 0 ? <Notice>1袋・1箱・1kgなど、売る単位を決めると値段を試せます。</Notice> : null}
       {trials.map((trial) => {
         const product = productMap.get(trial.productId);
         const unit = product ? unitMap.get(product.contentUnitId) : undefined;
@@ -764,8 +782,20 @@ function TrialsTab({
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-4">
               <Metric label="作れる数" value={`${result.count.toLocaleString("ja-JP")}${product?.salesUnitLabel || "個"}`} strong />
               <Metric label="使う量kg" value={kg(result.usedKg)} strong />
+              <Metric label="見込み手残り" value={yen(result.moneyLeftTotalYen)} strong />
+              <Metric label="目標との差" value={yen(summary.targetGapYen)} strong />
+            </div>
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Metric label="達成率" value={percent(summary.achievementRate)} />
+              <Metric
+                label="必要単価"
+                value={
+                  summary.requiredPricePerKg === null
+                    ? "未設定"
+                    : perKg(summary.requiredPricePerKg)
+                }
+              />
               <Metric label="余り" value={kg(result.remainderKg)} />
-              <Metric label="手元に残るお金" value={yen(result.moneyLeftTotalYen)} strong />
             </div>
             <p className="mt-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">
               {trial.inputMode === "weight"
@@ -773,9 +803,9 @@ function TrialsTab({
                 : `${product?.name || "選んだ形"}を${result.count.toLocaleString("ja-JP")}${product?.salesUnitLabel || "個"}作ると、${kg(result.usedKg)}使います。`}
             </p>
             <div className="mt-3 space-y-2">
-              {productResult?.warnings.missingContent ? <Warning>1つあたりの重さを入力してください</Warning> : null}
-              {productResult?.warnings.missingPrice ? <Warning>売値を入力してください</Warning> : null}
-              {result.hasRemainder ? <Warning>{kg(result.remainderKg)}余ります</Warning> : null}
+              {productResult?.warnings.missingContent ? <Notice>1つあたりの重さを入れると、使う量をkgで比べられます。</Notice> : null}
+              {productResult?.warnings.missingPrice ? <Notice>売値を入れると、目標との差が分かります。</Notice> : null}
+              {result.hasRemainder ? <Notice>{kg(result.remainderKg)}余ります</Notice> : null}
             </div>
           </article>
         );
@@ -831,61 +861,91 @@ function ResultTab({
   const weakProducts = summary.productResults.filter(
     (row) => row.result.warnings.negativeMoneyLeft
   );
-  const reviewCandidates = [
-    summary.hasUndecided ? "まだ売り方が決まっていない分の売り方を追加する" : "",
-    summary.isTargetEnough ? "" : "売値や売る数を見直す",
-    weakProducts.length > 0 ? "費用が売値を上回る売り方をやめるか、値段を変える" : ""
-  ].filter(Boolean);
+  const conclusion =
+    summary.targetCashYen <= 0
+      ? "今年いくら手元に残したいかを入れると、今の条件で届くかを試せます。"
+      : summary.isTargetEnough
+        ? "今の条件なら、目標を達成できそうです。"
+        : `今の条件では、目標まであと${yen(summary.shortageYen)}足りません。`;
 
   return (
     <div className="space-y-4">
       <div className={panelClass}>
-        <h2 className="text-xl font-black">結果</h2>
+        <p className="text-sm font-bold text-leaf">結論</p>
+        <h2 className="mt-1 text-2xl font-black text-stone-950">{conclusion}</h2>
+        <p className="mt-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">
+          判定：{summary.judgmentLabel}
+        </p>
+      </div>
+
+      <div className={panelClass}>
+        <h3 className="text-lg font-black">主要数字</h3>
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Metric label="今年残したいお金" value={yen(summary.targetCashYen)} strong />
-          <Metric label="今の計画で残るお金" value={yen(summary.totalMoneyLeftYen)} strong />
-          <Metric label="足りている金額・足りない金額" value={yen(summary.targetGapYen)} strong />
-          <Metric label="取れた量" value={kg(summary.harvestTotalKg)} />
+          <Metric label="目標手残り" value={yen(summary.targetCashYen)} strong />
+          <Metric label="現在見込み手残り" value={yen(summary.totalMoneyLeftYen)} strong />
+          <Metric label="差額" value={yen(summary.targetGapYen)} strong />
+          <Metric label="不足額" value={yen(summary.shortageYen)} />
+          <Metric label="達成率" value={percent(summary.achievementRate)} strong />
+          <Metric label="判定" value={summary.judgmentLabel} strong />
           <Metric label="売る形が決まった量" value={kg(summary.decidedKg)} />
           <Metric label="まだ売り方が決まっていない量" value={kg(summary.undecidedKg)} />
-          <Metric label="総売上" value={yen(summary.totalSalesYen)} />
-          <Metric label="平均で見る" value={perKg(summary.averageKgMoneyLeftYen)} />
         </div>
       </div>
 
       <div className={panelClass}>
-        <h3 className="text-lg font-black">今の見立て</h3>
+        <h3 className="text-lg font-black">改善シナリオ</h3>
         <div className="mt-3 space-y-2 text-sm font-semibold leading-6 text-stone-800">
+          {summary.canEstimateRequiredSalesKg && summary.requiredSalesKg !== null && summary.additionalRequiredKg !== null ? (
+            <p className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2">
+              今の売値のままなら、目標まで合計で{kg(summary.requiredSalesKg)}売る必要があります。今の予定から見ると、あと{kg(summary.additionalRequiredKg)}必要です。
+            </p>
+          ) : (
+            <Notice>売値や費用がまだ決まっていないため、必要な販売量を逆算できません。</Notice>
+          )}
+          {summary.canEstimateRequiredPrice && summary.requiredPricePerKg !== null && summary.additionalRequiredPricePerKg !== null ? (
+            <p className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2">
+              今の販売量のままなら、単価は{perKg(summary.requiredPricePerKg)}が目安です。今の平均から見ると、あと約{perKg(summary.additionalRequiredPricePerKg)}上げる必要があります。
+            </p>
+          ) : (
+            <Notice>売る量がまだ決まっていないため、必要な単価を逆算できません。</Notice>
+          )}
           <p className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2">
-            {summary.isTargetEnough
-              ? `今の計画では、目標より${yen(summary.targetGapYen)}多く残る見込みです。`
-              : `今の計画では、目標まであと${yen(Math.abs(summary.targetGapYen))}足りません。売値を見直すか、まだ売り方が決まっていない分の売り方を追加してください。`}
+            今の条件で現実的に残りそうなのは{yen(summary.realisticMoneyLeftYen)}です。
           </p>
           {summary.hasUndecided ? (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
-              まだ{kg(summary.undecidedKg)}分の売り方が決まっていません。余っている分を、訳あり袋やお試し商品に回すと、さらに手元に残るお金を増やせます。
-            </p>
+            <Notice>まだ{kg(summary.undecidedKg)}分の売り方が決まっていません。</Notice>
           ) : null}
-          {summary.hasNegativeProduct ? (
-            <Warning>費用が売値を上回っている売り方があります。その売り方は、売るほど手元に残るお金が減ります。</Warning>
+          {weakProducts.length > 0 ? (
+            <Notice>費用が売値を上回っている売り方があります。その売り方は、売るほど手元に残るお金が減る可能性があります。</Notice>
           ) : null}
-          {summary.hasOverDecided ? <Warning>取れた量を超えています</Warning> : null}
+          {summary.hasOverDecided ? (
+            <Notice>取れた量を超えています。売る量を少し下げるか、取れそうな量を見直してください。</Notice>
+          ) : null}
         </div>
       </div>
 
-      <div className={panelClass}>
-        <h3 className="text-lg font-black">見直す候補</h3>
-        {reviewCandidates.length > 0 ? (
+      {summary.nextSteps.length > 0 ? (
+        <div className={panelClass}>
+          <h3 className="text-lg font-black">次に決めること</h3>
+          <p className="mt-2 text-sm font-semibold text-stone-600">
+            まだ決めていない項目があります。次の項目を入れると、より正確に試せます。
+          </p>
           <ul className="mt-3 list-disc space-y-2 pl-5 text-sm font-semibold text-stone-700">
-            {reviewCandidates.map((item) => (
+            {summary.nextSteps.map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ul>
-        ) : (
-          <p className="mt-3 text-sm font-semibold text-stone-700">
-            まず結果を見るための入力はそろっています。
-          </p>
-        )}
+        </div>
+      ) : null}
+
+      <div className={panelClass}>
+        <h3 className="text-lg font-black">取れた量と売り方</h3>
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Metric label="取れた量" value={kg(summary.harvestTotalKg)} />
+          <Metric label="総売上" value={yen(summary.totalSalesYen)} />
+          <Metric label="平均で見る" value={perKg(summary.averageKgMoneyLeftYen)} />
+          <Metric label="来年の目標" value={yen(plan.nextYearTargetCashYen ?? 0)} />
+        </div>
       </div>
 
       <div className={panelClass}>
@@ -927,7 +987,7 @@ function buildTextOutput(
   const unitMap = new Map(units.map((unit) => [unit.id, unit]));
   const productMap = new Map(products.map((product) => [product.id, product]));
   const lines = [
-    "手残り販売計画 v1.0.0",
+    "手残り販売計画 v1.1.0",
     "",
     `作物名: ${plan.cropName || "未入力"}`,
     `品種名: ${plan.varietyName || "未入力"}`,
@@ -964,7 +1024,9 @@ function buildTextOutput(
     `まだ売り方が決まっていない量: ${kg(summary.undecidedKg)}`,
     `総売上: ${yen(summary.totalSalesYen)}`,
     `手元に残るお金: ${yen(summary.totalMoneyLeftYen)}`,
-    `目標との差: ${yen(summary.targetGapYen)}`
+    `目標との差: ${yen(summary.targetGapYen)}`,
+    `達成率: ${percent(summary.achievementRate)}`,
+    `判定: ${summary.judgmentLabel}`
   );
   return lines.join("\n");
 }

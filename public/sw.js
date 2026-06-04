@@ -1,4 +1,4 @@
-const CACHE_NAME = "tenokori-sales-plan-v1-0-0";
+const CACHE_NAME = "tenokori-sales-plan-v1-1-0";
 const APP_SHELL = ["/", "/manifest.json", "/icon.svg", "/field-pattern.svg"];
 
 self.addEventListener("install", (event) => {
