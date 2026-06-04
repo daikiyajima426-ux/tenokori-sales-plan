@@ -347,8 +347,8 @@ export default function Home() {
       <header className="mb-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-sm font-bold text-leaf">複数カードを合算して、目標に届くかを見る。</p>
-            <h1 className="mt-1 text-3xl font-black tracking-normal text-stone-950">手残り販売計画</h1>
+            <p className="text-sm font-bold text-leaf">複数の商品構成を組み合わせて、目標に届くかを見る。</p>
+            <h1 className="mt-1 text-2xl font-black tracking-normal text-stone-950 sm:text-3xl">農産物販売プランナー</h1>
           </div>
           <div className="flex flex-wrap gap-2">
             <button className={`${secondaryButton} no-print`} onClick={() => loadSample(false)}>基本サンプル</button>
@@ -358,11 +358,11 @@ export default function Home() {
       </header>
 
       <nav className="no-print sticky top-0 z-20 -mx-4 mb-4 border-y border-stone-200 bg-paper/95 px-4 py-2 backdrop-blur sm:mx-0 sm:rounded-lg sm:border">
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
           {TABS.map((tab) => (
             <button
               key={tab.id}
-              className={`shrink-0 rounded-md px-4 py-2 text-sm font-black ${activeTab === tab.id ? "bg-leaf text-white" : "bg-white text-stone-700 ring-1 ring-stone-200"}`}
+              className={`rounded-md px-2 py-2 text-xs font-black sm:shrink-0 sm:px-4 sm:text-sm ${activeTab === tab.id ? "bg-leaf text-white" : "bg-white text-stone-700 ring-1 ring-stone-200"}`}
               onClick={() => setActiveTab(tab.id)}
             >
               {tab.label}
@@ -440,8 +440,8 @@ function IntroTab({ start }: { start: () => void }) {
   return (
     <div className={panelClass}>
       <h2 className="text-2xl font-black">はじめに</h2>
-      <p className="mt-4 text-lg font-semibold leading-8 text-stone-800">
-        今年いくら手元に残したいかを決めて、取れた量・売る形・売り方を組み合わせて試すアプリです。
+      <p className="mt-4 break-words text-base font-semibold leading-7 text-stone-800 sm:text-lg sm:leading-8">
+        今年いくら手元に残したいかを決めて、取れた量・売る形・販売計画を組み合わせて試すアプリです。
       </p>
       <div className="mt-6">
         <button className={primaryButton} onClick={start}>はじめる</button>
@@ -674,7 +674,7 @@ function SalesPlanCardsTab({
           <CardShell
             key={card.id}
             title={`${card.name || `販売計画${index + 1}`}：${roleLabel}｜${missing ? "売る形・売値・販売数が未入力" : `${product?.name || "売る形"} ${yen(card.pricePerUnit)} × ${card.plannedUnits}${product?.unitName || "個"}`}`}
-            summary={missing ? result.missing.join(" / ") : `使用量 ${kg(result.usedKg)}、費用未反映の見込み ${yen(result.takeHomeYen)}`}
+            summary={missing ? result.missing.join(" / ") : `使用量 ${kg(result.usedKg)}、販売見込み ${yen(result.takeHomeYen)}`}
             isOpen={openCards[card.id] ?? true}
             onToggle={() => toggleCard(card.id)}
             actions={
@@ -718,7 +718,7 @@ function SalesPlanCardsTab({
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Metric label="使用量" value={kg(result.usedKg)} />
               <Metric label="売上" value={yen(result.salesYen)} />
-              <Metric label="費用未反映の見込み額" value={yen(result.takeHomeYen)} strong />
+              <Metric label="販売見込み額" value={yen(result.takeHomeYen)} strong />
             </div>
           </CardShell>
         );
@@ -765,24 +765,30 @@ function ResultTab({
       <div className={panelClass}>
         <p className="text-sm font-bold text-leaf">全体結論</p>
         <h2 className="mt-1 text-2xl font-black text-stone-950">{conclusion}</h2>
-      </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-        <Metric label="目標手残り" value={yen(summary.targetCashYen)} strong />
-        <Metric label="販売見込み額" value={yen(summary.totalTakeHomeYen)} strong />
-        <Metric label="差額" value={yen(summary.targetGapYen)} strong />
-        <Metric label="達成率" value={percent(summary.achievementRate)} />
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Metric label="目標手残り" value={yen(summary.targetCashYen)} strong />
+          <Metric label="販売見込み額" value={yen(summary.totalTakeHomeYen)} strong />
+          <Metric label="差額" value={yen(summary.targetGapYen)} strong />
+          <Metric label="達成率" value={percent(summary.achievementRate)} />
+        </div>
       </div>
       <div className={panelClass}>
-        <h3 className="text-lg font-black">注意・警告</h3>
+        <h3 className="text-lg font-black">確認しておきたいこと</h3>
         <div className="mt-3 space-y-4">
           <AttentionGroup title="データ注意" items={summary.dataWarnings} />
           <AttentionGroup title="在庫注意" items={summary.stockWarnings} />
           <AttentionGroup title="目標注意" items={summary.targetWarnings} />
           <AttentionGroup title="商品構成注意" items={summary.compositionWarnings} />
           <AttentionGroup title="仮説不足" items={summary.hypothesisWarnings} />
+          {summary.compositionWarnings.length === 0 && summary.salesResults.length > 0 ? (
+            <div>
+              <p className="text-sm font-black text-stone-800">商品構成</p>
+              <p className="mt-2 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">入口商品・日常商品・利益商品・ブランド商品・ロス削減商品が揃っています。</p>
+            </div>
+          ) : null}
           {summary.stockWarnings.length === 0 ? (
             <div>
-              <p className="text-sm font-black text-stone-800">在庫面の確認</p>
+              <p className="text-sm font-black text-stone-800">在庫面</p>
               <p className="mt-2 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">在庫面では大きな超過はありません。</p>
             </div>
           ) : null}
@@ -791,19 +797,11 @@ function ResultTab({
       <div className={panelClass}>
         <h3 className="text-lg font-black">商品構成チェック</h3>
         <p className="mt-1 text-sm font-semibold text-stone-600">販売計画を、入口・日常・利益・ブランド・ロス削減の役割ごとに見ます。</p>
-        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
           {summary.compositionRows.map((row) => (
-            <div key={row.role} className="rounded-md border border-stone-200 bg-stone-50 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="font-black text-stone-950">{row.label}</p>
-                <p className="rounded-full bg-white px-2 py-1 text-xs font-black text-stone-600 ring-1 ring-stone-200">{row.count}件</p>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <Metric label="販売見込み" value={yen(row.salesYen)} />
-                <Metric label="売上比率" value={percent(row.salesShare)} />
-                <Metric label="予定数" value={`${row.plannedUnits.toLocaleString("ja-JP")}単位`} />
-                <Metric label="使用量" value={kg(row.usedKg)} />
-              </div>
+            <div key={row.role} className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2">
+              <p className="font-black text-stone-950">{row.label}：{row.count}件 / {yen(row.salesYen)}</p>
+              <p className="mt-1 text-xs font-semibold text-stone-600">比率 {percent(row.salesShare)} / 使用 {kg(row.usedKg)}</p>
             </div>
           ))}
         </div>
@@ -820,16 +818,19 @@ function ResultTab({
       </div>
       <div className={panelClass}>
         <h3 className="text-lg font-black">カード別結果</h3>
-        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
           {summary.salesResults.map((row) => (
             <div key={row.card.id} className="rounded-md border border-stone-200 bg-stone-50 p-3">
               <p className="font-black text-stone-950">{row.card.name}</p>
-              <p className="mt-1 text-sm font-semibold text-stone-600">{row.product?.name || "売る形未選択"} / {yen(row.card.pricePerUnit)} × {row.card.plannedUnits.toLocaleString("ja-JP")}{row.product?.unitName || "個"}</p>
-              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <Metric label="使用量" value={kg(row.usedKg)} />
-                <Metric label="売上" value={yen(row.salesYen)} />
-                <Metric label="費用未反映の見込み額" value={yen(row.takeHomeYen)} strong />
-              </div>
+              <p className="mt-1 text-sm font-black text-leaf">{PRODUCT_ROLE_LABELS[row.card.productRole ?? "unset"]} / 使用量 {kg(row.usedKg)} / 販売見込み {yen(row.takeHomeYen)}</p>
+              <details className="mt-2">
+                <summary className="cursor-pointer text-sm font-semibold text-stone-600">詳細を見る</summary>
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <Metric label="売る形" value={row.product?.name || "未選択"} />
+                  <Metric label="売値" value={yen(row.card.pricePerUnit)} />
+                  <Metric label="販売予定数" value={`${row.card.plannedUnits.toLocaleString("ja-JP")}${row.product?.unitName || "個"}`} />
+                </div>
+              </details>
               {row.missing.length > 0 ? <p className="mt-2 text-sm font-semibold text-amber-900">{row.missing.join(" / ")}</p> : null}
             </div>
           ))}
@@ -841,7 +842,7 @@ function ResultTab({
           <Metric label="販売見込み額" value={yen(summary.totalTakeHomeYen)} strong />
           <Metric label="合計使用量" value={kg(summary.totalUsedKg)} />
           <Metric label="未使用量" value={kg(summary.totalUnusedKg)} />
-          <Metric label="必要単価の目安" value={priceGuide === null ? "未設定" : yen(priceGuide)} />
+          <Metric label="全体平均で見た必要単価の目安" value={priceGuide === null ? "未設定" : yen(priceGuide)} />
         </div>
         <div className="space-y-2">
           {summary.harvestUsage.map((row) => (
@@ -851,15 +852,6 @@ function ResultTab({
           ))}
         </div>
       </CardShell>
-      {summary.hasMissingItems ? (
-        <div className={panelClass}>
-          <h3 className="text-lg font-black">次に決めること</h3>
-          <p className="mt-2 text-sm font-semibold text-stone-600">まだ決めていない項目があります。</p>
-          <ul className="mt-3 list-disc space-y-2 pl-5 text-sm font-semibold text-stone-700">
-            {summary.missingItems.map((item) => <li key={item}>{item}</li>)}
-          </ul>
-        </div>
-      ) : null}
       <CardShell title="データ管理" summary="JSON出力・読み込み、バージョン情報はこちら" isOpen={dataOpen} onToggle={() => setDataOpen(!dataOpen)}>
         <p className="text-sm text-stone-600">入力内容はこのブラウザに自動保存されます。schemaVersionは5です。</p>
         <div className="flex flex-wrap gap-2">
@@ -887,7 +879,7 @@ function buildTextOutput(
   const summary = calculateSummary(plan, harvestCards, productCards, salesPlanCards);
   const productMap = new Map(productCards.map((card) => [card.id, card]));
   const lines = [
-    "手残り販売計画 v1.2.0",
+    "農産物販売プランナー v1.2.1",
     "",
     `作物名: ${plan.cropName || "未入力"}`,
     `目標手残り: ${yen(plan.targetCashYen)}`,

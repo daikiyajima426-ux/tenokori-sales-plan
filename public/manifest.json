@@ -1,7 +1,7 @@
 {
-  "name": "手残り販売計画",
-  "short_name": "手残り計画",
-  "description": "複数の取れた量・売る形・販売計画を合算できる販売計画シミュレーター。",
+  "name": "農産物販売プランナー",
+  "short_name": "販売プランナー",
+  "description": "複数の商品構成を組み合わせて、農産物の販売計画が目標に届くかを見るプランナー。",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#fffaf1",

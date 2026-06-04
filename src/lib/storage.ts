@@ -15,6 +15,8 @@ import type {
   Settings
 } from "@/types/domain";
 
+const ACCEPTED_APP_NAMES = [APP_NAME, "手残り販売計画"];
+
 type StoredState = {
   plan: Plan;
   harvestCards: HarvestCard[];
@@ -190,7 +192,10 @@ export function getImportValidationError(value: unknown) {
   if (!isObject(value)) {
     return "このデータは読み込めません。保存形式が違うか、内容が壊れている可能性があります。";
   }
-  if (value.appName !== APP_NAME) return "別アプリのJSONです。";
+  if (typeof value.appName === "string" && !ACCEPTED_APP_NAMES.includes(value.appName)) {
+    return "別アプリのJSONです。";
+  }
+  if (isObject(value.data)) return "";
   if (value.appVersion !== APP_VERSION && !isObject(value.plan)) {
     return "このデータは旧形式です。";
   }

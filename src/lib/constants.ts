@@ -1,5 +1,5 @@
-export const APP_NAME = "手残り販売計画";
-export const APP_VERSION = "1.2.0";
+export const APP_NAME = "農産物販売プランナー";
+export const APP_VERSION = "1.2.1";
 export const SCHEMA_VERSION = 5;
 
 export const STORAGE_KEYS = {

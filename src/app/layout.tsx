@@ -2,12 +2,12 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "手残り販売計画",
-  description: "複数の取れた量・売る形・販売計画を合算できる販売計画シミュレーター。",
+  title: "農産物販売プランナー",
+  description: "複数の商品構成を組み合わせて、農産物の販売計画が目標に届くかを見るプランナー。",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    title: "手残り販売計画",
+    title: "農産物販売プランナー",
     statusBarStyle: "default"
   }
 };
