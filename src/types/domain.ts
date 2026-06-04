@@ -78,7 +78,7 @@ export type Settings = {
 
 export type ExportData = {
   appName: "手残り販売計画";
-  appVersion: "1.1.0";
+  appVersion: "1.2.0";
   exportedAt: string;
   plan: Plan;
   units: Unit[];

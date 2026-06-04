@@ -1,7 +1,7 @@
 {
   "name": "手残り販売計画",
   "short_name": "手残り計画",
-  "description": "今の条件で目標に届くかを試せる農家向け販売計画シミュレーター。",
+  "description": "入力済み内容を要約し、目標との差を迷わず確認できる販売計画シミュレーター。",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#fffaf1",

@@ -153,6 +153,61 @@ function Notice({ children }: { children: React.ReactNode }) {
   );
 }
 
+function CollapsibleBlock({
+  title,
+  summary,
+  helper,
+  isOpen,
+  onToggle,
+  children
+}: {
+  title: string;
+  summary: string;
+  helper: string;
+  isOpen: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={panelClass}>
+      <button
+        type="button"
+        className="flex h-auto w-full items-start justify-between gap-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-3 text-left text-stone-950 transition hover:bg-stone-100"
+        onClick={onToggle}
+      >
+        <span className="min-w-0">
+          <span className="block text-base font-black">
+            {isOpen ? "▾" : "▸"} {title}：{summary}
+          </span>
+          <span className="mt-1 block text-sm font-semibold leading-6 text-stone-600">
+            {helper}
+          </span>
+        </span>
+      </button>
+      {isOpen ? <div className="mt-4">{children}</div> : null}
+    </div>
+  );
+}
+
+function NextAction({
+  message,
+  buttonLabel,
+  onClick
+}: {
+  message: string;
+  buttonLabel: string;
+  onClick: () => void;
+}) {
+  return (
+    <div className="mt-4 rounded-md border border-green-200 bg-green-50 p-3">
+      <p className="text-sm font-semibold text-green-900">{message}</p>
+      <button type="button" className={`${primaryButton} mt-3`} onClick={onClick}>
+        {buttonLabel}
+      </button>
+    </div>
+  );
+}
+
 const percent = (value: number | null) =>
   value === null ? "未設定" : `${Math.round(value * 100).toLocaleString("ja-JP")}%`;
 
@@ -169,6 +224,14 @@ export default function Home() {
   const [loadErrors, setLoadErrors] = useState<string[]>([]);
   const [saveError, setSaveError] = useState("");
   const [importMessage, setImportMessage] = useState("");
+  const [openBlocks, setOpenBlocks] = useState<Record<string, boolean>>({
+    goal: true,
+    harvests: true,
+    products: true,
+    trials: true,
+    resultDetails: false,
+    dataManagement: false
+  });
   const loadedRef = useRef(false);
   const skipNextSaveRef = useRef(false);
 
@@ -235,6 +298,10 @@ export default function Home() {
 
   const setActiveTab = (activeTab: TabId) =>
     setSettings((current) => ({ ...current, activeTab }));
+  const setBlockOpen = (key: string, isOpen: boolean) =>
+    setOpenBlocks((current) => ({ ...current, [key]: isOpen }));
+  const toggleBlock = (key: string) =>
+    setOpenBlocks((current) => ({ ...current, [key]: !current[key] }));
 
   const updatePlan = (patch: Partial<Plan>) =>
     setPlan((current) => ({ ...current, ...patch, updatedAt: nowIso() }));
@@ -247,7 +314,7 @@ export default function Home() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `tenokori-sales-plan-v110-${new Date()
+    link.download = `tenokori-sales-plan-v120-${new Date()
       .toISOString()
       .slice(0, 10)}.json`;
     link.click();
@@ -352,7 +419,16 @@ export default function Home() {
             }}
           />
         ) : null}
-        {activeTab === "goal" ? <GoalTab plan={plan} updatePlan={updatePlan} /> : null}
+        {activeTab === "goal" ? (
+          <GoalTab
+            plan={plan}
+            updatePlan={updatePlan}
+            isOpen={openBlocks.goal ?? true}
+            onToggle={() => toggleBlock("goal")}
+            onSave={() => setBlockOpen("goal", false)}
+            goNext={() => setActiveTab("harvests")}
+          />
+        ) : null}
         {activeTab === "harvests" ? (
           <HarvestTab
             planId={plan.id}
@@ -361,6 +437,10 @@ export default function Home() {
             harvests={harvests}
             setHarvests={setHarvests}
             summary={summary}
+            isOpen={openBlocks.harvests ?? true}
+            onToggle={() => toggleBlock("harvests")}
+            onSave={() => setBlockOpen("harvests", false)}
+            goNext={() => setActiveTab("products")}
           />
         ) : null}
         {activeTab === "products" ? (
@@ -369,6 +449,10 @@ export default function Home() {
             units={units}
             products={products}
             setProducts={setProducts}
+            isOpen={openBlocks.products ?? true}
+            onToggle={() => toggleBlock("products")}
+            onSave={() => setBlockOpen("products", false)}
+            goNext={() => setActiveTab("trials")}
           />
         ) : null}
         {activeTab === "trials" ? (
@@ -380,6 +464,10 @@ export default function Home() {
             trials={trials}
             setTrials={setTrials}
             summary={summary}
+            isOpen={openBlocks.trials ?? true}
+            onToggle={() => toggleBlock("trials")}
+            onSave={() => setBlockOpen("trials", false)}
+            goNext={() => setActiveTab("result")}
           />
         ) : null}
         {activeTab === "result" ? (
@@ -390,6 +478,10 @@ export default function Home() {
             exportJson={exportJson}
             importJson={importJson}
             importMessage={importMessage}
+            detailsOpen={openBlocks.resultDetails ?? false}
+            toggleDetails={() => toggleBlock("resultDetails")}
+            dataOpen={openBlocks.dataManagement ?? false}
+            toggleData={() => toggleBlock("dataManagement")}
           />
         ) : null}
       </section>
@@ -419,17 +511,38 @@ function IntroTab({ start }: { start: () => void }) {
 
 function GoalTab({
   plan,
-  updatePlan
+  updatePlan,
+  isOpen,
+  onToggle,
+  onSave,
+  goNext
 }: {
   plan: Plan;
   updatePlan: (patch: Partial<Plan>) => void;
+  isOpen: boolean;
+  onToggle: () => void;
+  onSave: () => void;
+  goNext: () => void;
 }) {
+  const summary =
+    plan.targetCashYen > 0 ? yen(plan.targetCashYen) : "未入力";
   return (
-    <div className={panelClass}>
+    <div className="space-y-4">
       <h2 className="text-xl font-black">目標</h2>
-      <p className="mt-2 text-sm font-semibold leading-6 text-stone-600">
+      <p className="text-sm font-semibold leading-6 text-stone-600">
         生活費、来年の準備、資材代などを考えて、今年いくら手元に残したいかを決めます。
       </p>
+      <CollapsibleBlock
+        title="目標"
+        summary={summary}
+        helper={
+          plan.targetCashYen > 0
+            ? "今年、手元に残したい金額です。"
+            : "まず、今年いくら手元に残したいかを入れてください。"
+        }
+        isOpen={isOpen}
+        onToggle={onToggle}
+      >
       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
         <TextInput
           label="作物名"
@@ -467,6 +580,22 @@ function GoalTab({
           onChange={(event) => updatePlan({ memo: event.target.value })}
         />
       </label>
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <button type="button" className={primaryButton} onClick={onSave}>
+            保存する
+          </button>
+          <button type="button" className={secondaryButton} onClick={goNext}>
+            取れた量へ進む
+          </button>
+        </div>
+      </CollapsibleBlock>
+      {!isOpen ? (
+        <NextAction
+          message="目標を保存しました。次は「取れた量」を入れてください。"
+          buttonLabel="取れた量へ進む"
+          onClick={goNext}
+        />
+      ) : null}
     </div>
   );
 }
@@ -477,7 +606,11 @@ function HarvestTab({
   setUnits,
   harvests,
   setHarvests,
-  summary
+  summary,
+  isOpen,
+  onToggle,
+  onSave,
+  goNext
 }: {
   planId: string;
   units: Unit[];
@@ -485,6 +618,10 @@ function HarvestTab({
   harvests: Harvest[];
   setHarvests: React.Dispatch<React.SetStateAction<Harvest[]>>;
   summary: ReturnType<typeof calculateSummary>;
+  isOpen: boolean;
+  onToggle: () => void;
+  onSave: () => void;
+  goNext: () => void;
 }) {
   const unitMap = new Map(units.map((unit) => [unit.id, unit]));
   const updateUnit = (id: string, patch: Partial<Unit>) =>
@@ -502,15 +639,30 @@ function HarvestTab({
 
   return (
     <div className="space-y-4">
+      <h2 className="text-xl font-black">取れた量</h2>
+      <p className="text-sm font-semibold leading-6 text-stone-600">
+        売れそうな量を入れてください。正確でなくても構いません。
+      </p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Metric label="取れた量" value={kg(summary.harvestTotalKg)} strong />
         <Metric label="売る形が決まった量" value={kg(summary.decidedKg)} />
         <Metric label="まだ売り方が決まっていない量" value={kg(summary.undecidedKg)} strong />
       </div>
 
-      <div className={panelClass}>
+      <CollapsibleBlock
+        title="取れた量"
+        summary={summary.harvestTotalKg > 0 ? kg(summary.harvestTotalKg) : "未入力"}
+        helper={
+          summary.harvestTotalKg > 0
+            ? "売れそうな量です。"
+            : "売れる量の見込みがないため、必要な量を逆算できません。"
+        }
+        isOpen={isOpen}
+        onToggle={onToggle}
+      >
+      <div className="rounded-lg border border-stone-200 bg-white p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-xl font-black">数え方</h2>
+          <h3 className="text-lg font-black">数え方</h3>
           <button className={primaryButton} onClick={() => setUnits((current) => [...current, createUnit()])}>
             数え方を追加
           </button>
@@ -545,7 +697,7 @@ function HarvestTab({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-xl font-black">取れた量</h2>
+        <h3 className="text-lg font-black">取れた量の入力</h3>
         <button className={primaryButton} onClick={() => setHarvests((current) => [...current, createHarvest(planId, units[0]?.id ?? "unit-kg")])}>
           取れた量を追加
         </button>
@@ -584,6 +736,22 @@ function HarvestTab({
           </article>
         );
       })}
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <button type="button" className={primaryButton} onClick={onSave}>
+            保存する
+          </button>
+          <button type="button" className={secondaryButton} onClick={goNext}>
+            売る形へ進む
+          </button>
+        </div>
+      </CollapsibleBlock>
+      {!isOpen ? (
+        <NextAction
+          message="取れた量を保存しました。次は「売る形」を決めてください。"
+          buttonLabel="売る形へ進む"
+          onClick={goNext}
+        />
+      ) : null}
     </div>
   );
 }
@@ -592,12 +760,20 @@ function ProductsTab({
   planId,
   units,
   products,
-  setProducts
+  setProducts,
+  isOpen,
+  onToggle,
+  onSave,
+  goNext
 }: {
   planId: string;
   units: Unit[];
   products: Product[];
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
+  isOpen: boolean;
+  onToggle: () => void;
+  onSave: () => void;
+  goNext: () => void;
 }) {
   const unitMap = new Map(units.map((unit) => [unit.id, unit]));
   const updateProduct = (id: string, patch: Partial<Product>) =>
@@ -607,10 +783,33 @@ function ProductsTab({
       )
     );
 
+  const firstProduct = products[0];
+  const firstUnit = firstProduct ? unitMap.get(firstProduct.contentUnitId) : undefined;
+  const productSummary = firstProduct
+    ? `1${firstProduct.salesUnitLabel || "つ"} ${kg(
+        calculateProduct(firstProduct, firstUnit).contentKg
+      )}`
+    : "未入力";
+
   return (
     <div className="space-y-4">
+      <h2 className="text-xl font-black">売る形</h2>
+      <p className="text-sm font-semibold leading-6 text-stone-600">
+        1袋・1箱・1kgなど、実際に売る単位です。
+      </p>
+      <CollapsibleBlock
+        title="売る形"
+        summary={productSummary}
+        helper={
+          products.length > 0
+            ? "実際に売る単位です。"
+            : "1袋・1箱・1kgなど、売る単位を決めると値段を試せます。"
+        }
+        isOpen={isOpen}
+        onToggle={onToggle}
+      >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-xl font-black">売る形</h2>
+        <h3 className="text-lg font-black">売る形の入力</h3>
         <button className={primaryButton} onClick={() => setProducts((current) => [...current, createProduct(planId, units[0]?.id ?? "unit-kg")])}>
           売る形を追加
         </button>
@@ -669,6 +868,22 @@ function ProductsTab({
           </article>
         );
       })}
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <button type="button" className={primaryButton} onClick={onSave}>
+            保存する
+          </button>
+          <button type="button" className={secondaryButton} onClick={goNext}>
+            試すへ進む
+          </button>
+        </div>
+      </CollapsibleBlock>
+      {!isOpen ? (
+        <NextAction
+          message="売る形を保存しました。次は値段を試してください。"
+          buttonLabel="試すへ進む"
+          onClick={goNext}
+        />
+      ) : null}
     </div>
   );
 }
@@ -680,7 +895,11 @@ function TrialsTab({
   setProducts,
   trials,
   setTrials,
-  summary
+  summary,
+  isOpen,
+  onToggle,
+  onSave,
+  goNext
 }: {
   planId: string;
   units: Unit[];
@@ -689,6 +908,10 @@ function TrialsTab({
   trials: Trial[];
   setTrials: React.Dispatch<React.SetStateAction<Trial[]>>;
   summary: ReturnType<typeof calculateSummary>;
+  isOpen: boolean;
+  onToggle: () => void;
+  onSave: () => void;
+  goNext: () => void;
 }) {
   const productMap = new Map(products.map((product) => [product.id, product]));
   const unitMap = new Map(units.map((unit) => [unit.id, unit]));
@@ -704,9 +927,19 @@ function TrialsTab({
         product.id === id ? { ...product, ...patch, updatedAt: nowIso() } : product
       )
     );
+  const firstTrialProduct = productMap.get(trials[0]?.productId ?? "");
+  const trialSummary = firstTrialProduct
+    ? `1${firstTrialProduct.salesUnitLabel || "つ"} ${yen(firstTrialProduct.priceYen)}`
+    : products.some((product) => product.priceYen <= 0)
+      ? "売値未入力"
+      : "未入力";
 
   return (
     <div className="space-y-4">
+      <h2 className="text-xl font-black">売り方を試す</h2>
+      <p className="text-sm font-semibold leading-6 text-stone-600">
+        値段を動かして、目標との差を試せます。
+      </p>
       <div className="sticky top-[57px] z-10 -mx-4 grid grid-cols-2 gap-2 border-y border-stone-200 bg-paper/95 p-4 backdrop-blur sm:top-[65px] sm:mx-0 sm:rounded-lg sm:border lg:grid-cols-4">
         <Metric label="見込み手残り" value={yen(summary.totalMoneyLeftYen)} strong />
         <Metric label="目標との差" value={yen(summary.targetGapYen)} strong />
@@ -720,8 +953,19 @@ function TrialsTab({
           }
         />
       </div>
+      <CollapsibleBlock
+        title="試す"
+        summary={trialSummary}
+        helper={
+          firstTrialProduct
+            ? "値段を動かして、目標との差を試せます。"
+            : "売値を入れると、目標との差が分かります。"
+        }
+        isOpen={isOpen}
+        onToggle={onToggle}
+      >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-xl font-black">売り方を試す</h2>
+        <h3 className="text-lg font-black">値段と売る量</h3>
         <button className={primaryButton} disabled={products.length === 0} onClick={() => setTrials((current) => [...current, createTrial(planId, products[0]?.id ?? "")])}>
           試す行を追加
         </button>
@@ -810,6 +1054,22 @@ function TrialsTab({
           </article>
         );
       })}
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <button type="button" className={primaryButton} onClick={onSave}>
+            保存する
+          </button>
+          <button type="button" className={secondaryButton} onClick={goNext}>
+            結果へ進む
+          </button>
+        </div>
+      </CollapsibleBlock>
+      {!isOpen ? (
+        <NextAction
+          message="試した内容を保存しました。結果で全体を確認できます。"
+          buttonLabel="結果へ進む"
+          onClick={goNext}
+        />
+      ) : null}
     </div>
   );
 }
@@ -849,7 +1109,11 @@ function ResultTab({
   textOutput,
   exportJson,
   importJson,
-  importMessage
+  importMessage,
+  detailsOpen,
+  toggleDetails,
+  dataOpen,
+  toggleData
 }: {
   plan: Plan;
   summary: ReturnType<typeof calculateSummary>;
@@ -857,6 +1121,10 @@ function ResultTab({
   exportJson: () => void;
   importJson: (file?: File) => void;
   importMessage: string;
+  detailsOpen: boolean;
+  toggleDetails: () => void;
+  dataOpen: boolean;
+  toggleData: () => void;
 }) {
   const weakProducts = summary.productResults.filter(
     (row) => row.result.warnings.negativeMoneyLeft
@@ -879,32 +1147,21 @@ function ResultTab({
       </div>
 
       <div className={panelClass}>
-        <h3 className="text-lg font-black">主要数字</h3>
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Metric label="目標手残り" value={yen(summary.targetCashYen)} strong />
-          <Metric label="現在見込み手残り" value={yen(summary.totalMoneyLeftYen)} strong />
-          <Metric label="差額" value={yen(summary.targetGapYen)} strong />
-          <Metric label="不足額" value={yen(summary.shortageYen)} />
-          <Metric label="達成率" value={percent(summary.achievementRate)} strong />
-          <Metric label="判定" value={summary.judgmentLabel} strong />
-          <Metric label="売る形が決まった量" value={kg(summary.decidedKg)} />
-          <Metric label="まだ売り方が決まっていない量" value={kg(summary.undecidedKg)} />
-        </div>
-      </div>
-
-      <div className={panelClass}>
-        <h3 className="text-lg font-black">改善シナリオ</h3>
+        <h3 className="text-lg font-black">次に動かすこと</h3>
+        <p className="mt-2 text-sm font-semibold text-stone-600">
+          目標に近づけるには、主に2つです。
+        </p>
         <div className="mt-3 space-y-2 text-sm font-semibold leading-6 text-stone-800">
           {summary.canEstimateRequiredSalesKg && summary.requiredSalesKg !== null && summary.additionalRequiredKg !== null ? (
             <p className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2">
-              今の売値のままなら、目標まで合計で{kg(summary.requiredSalesKg)}売る必要があります。今の予定から見ると、あと{kg(summary.additionalRequiredKg)}必要です。
+              1. 売る量を増やすなら、あと{kg(summary.additionalRequiredKg)}必要です。
             </p>
           ) : (
             <Notice>売値や費用がまだ決まっていないため、必要な販売量を逆算できません。</Notice>
           )}
           {summary.canEstimateRequiredPrice && summary.requiredPricePerKg !== null && summary.additionalRequiredPricePerKg !== null ? (
             <p className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2">
-              今の販売量のままなら、単価は{perKg(summary.requiredPricePerKg)}が目安です。今の平均から見ると、あと約{perKg(summary.additionalRequiredPricePerKg)}上げる必要があります。
+              2. 値段を上げるなら、{perKg(summary.requiredPricePerKg)}が目安です。
             </p>
           ) : (
             <Notice>売る量がまだ決まっていないため、必要な単価を逆算できません。</Notice>
@@ -923,6 +1180,29 @@ function ResultTab({
           ) : null}
         </div>
       </div>
+
+      <CollapsibleBlock
+        title="詳しい数字を見る"
+        summary={detailsOpen ? "表示中" : "閉じています"}
+        helper="達成率、差額、必要な量や単価を確認できます。"
+        isOpen={detailsOpen}
+        onToggle={toggleDetails}
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Metric label="目標手残り" value={yen(summary.targetCashYen)} strong />
+          <Metric label="現在見込み手残り" value={yen(summary.totalMoneyLeftYen)} strong />
+          <Metric label="差額" value={yen(summary.targetGapYen)} strong />
+          <Metric label="不足額" value={yen(summary.shortageYen)} />
+          <Metric label="達成率" value={percent(summary.achievementRate)} strong />
+          <Metric label="必要販売量" value={summary.requiredSalesKg === null ? "未設定" : kg(summary.requiredSalesKg)} />
+          <Metric label="追加必要販売量" value={summary.additionalRequiredKg === null ? "未設定" : kg(summary.additionalRequiredKg)} />
+          <Metric label="必要単価" value={summary.requiredPricePerKg === null ? "未設定" : perKg(summary.requiredPricePerKg)} />
+          <Metric label="追加必要単価" value={summary.additionalRequiredPricePerKg === null ? "未設定" : perKg(summary.additionalRequiredPricePerKg)} />
+          <Metric label="売る形が決まった量" value={kg(summary.decidedKg)} />
+          <Metric label="まだ売り方が決まっていない量" value={kg(summary.undecidedKg)} />
+          <Metric label="判定" value={summary.judgmentLabel} strong />
+        </div>
+      </CollapsibleBlock>
 
       {summary.nextSteps.length > 0 ? (
         <div className={panelClass}>
@@ -948,9 +1228,14 @@ function ResultTab({
         </div>
       </div>
 
-      <div className={panelClass}>
-        <h3 className="text-lg font-black">出力</h3>
-        <p className="mt-2 text-sm text-stone-600">入力内容はこのブラウザに自動保存されます。</p>
+      <CollapsibleBlock
+        title="データ管理"
+        summary="JSON出力・読み込み、バージョン情報はこちら"
+        helper="保存や読み込みの補助機能です。販売判断とは分けて確認できます。"
+        isOpen={dataOpen}
+        onToggle={toggleData}
+      >
+        <p className="text-sm text-stone-600">入力内容はこのブラウザに自動保存されます。</p>
         <div className="mt-4 flex flex-wrap gap-2">
           <button className={primaryButton} onClick={exportJson}>JSON出力</button>
           <label className={secondaryButton}>
@@ -961,12 +1246,17 @@ function ResultTab({
           <button className={secondaryButton} onClick={() => window.print()}>印刷</button>
         </div>
         {importMessage ? <p className="mt-3 text-sm font-semibold text-leaf">{importMessage}</p> : null}
-      </div>
+      </CollapsibleBlock>
 
-      <div className={panelClass}>
-        <h3 className="text-lg font-black">テキスト出力</h3>
+      <CollapsibleBlock
+        title="テキスト出力"
+        summary="コピー用の文章"
+        helper="相談や記録に使う文章を確認できます。"
+        isOpen={dataOpen}
+        onToggle={toggleData}
+      >
         <textarea className={`${inputClass} mt-3 min-h-96 font-mono text-sm`} value={textOutput} readOnly />
-      </div>
+      </CollapsibleBlock>
     </div>
   );
 }
@@ -987,7 +1277,7 @@ function buildTextOutput(
   const unitMap = new Map(units.map((unit) => [unit.id, unit]));
   const productMap = new Map(products.map((product) => [product.id, product]));
   const lines = [
-    "手残り販売計画 v1.1.0",
+    "手残り販売計画 v1.2.0",
     "",
     `作物名: ${plan.cropName || "未入力"}`,
     `品種名: ${plan.varietyName || "未入力"}`,
