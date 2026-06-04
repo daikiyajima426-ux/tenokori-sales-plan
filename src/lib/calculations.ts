@@ -29,6 +29,9 @@ export function calculateSalesPlan(
   const salesYen = pricePerUnit * plannedUnits;
   const missing: string[] = [];
 
+  if (card.harvestId && !harvest) {
+    missing.push(`${card.name}：取れた量が未選択です`);
+  }
   if (!product) missing.push(`${card.name}：売る形が未選択です`);
   if (unitKg <= 0) missing.push(`${card.name}：売る形の中身が未入力です`);
   if (pricePerUnit <= 0) missing.push(`${card.name}：売値が未入力です`);
@@ -43,6 +46,7 @@ export function calculateSalesPlan(
     salesYen,
     takeHomeYen: salesYen,
     isValid: missing.length === 0,
+    canCheckStock: Boolean(harvest && product && unitKg > 0 && plannedUnits > 0),
     missing
   };
 }
@@ -86,17 +90,18 @@ export function calculateSummary(
   const targetGapYen = totalTakeHomeYen - targetCashYen;
   const shortageYen = Math.max(0, targetCashYen - totalTakeHomeYen);
   const achievementRate = targetCashYen > 0 ? totalTakeHomeYen / targetCashYen : null;
+  const stockCheckResults = salesResults.filter((row) => row.canCheckStock);
 
   const harvestUsage = harvestCards.map((harvest) => {
-    const usedKg = validResults
+    const usedKg = stockCheckResults
       .filter((row) => row.card.harvestId === harvest.id)
       .reduce((sum, row) => sum + row.usedKg, 0);
     const overKg = Math.max(0, usedKg - safeNumber(harvest.amount));
     return { harvest, usedKg, overKg, hasOver: overKg > 0 };
   });
 
-  const unlinkedUsedKg = validResults
-    .filter((row) => !row.card.harvestId)
+  const unlinkedUsedKg = stockCheckResults
+    .filter((row) => !row.card.harvestId || !row.harvest)
     .reduce((sum, row) => sum + row.usedKg, 0);
   const stockWarnings = harvestUsage
     .filter((row) => row.hasOver)
