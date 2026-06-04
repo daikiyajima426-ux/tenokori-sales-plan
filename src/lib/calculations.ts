@@ -114,7 +114,15 @@ export function calculateSummary(
     totalOverKg > 0
       ? [`販売予定量の合計が、取れた量の合計を${round(totalOverKg)}kg上回っています。売る量を減らすか、取れた量を見直してください。`]
       : [];
-  const allStockWarnings = [...globalStockWarnings, ...stockWarnings];
+  const allStockWarnings = [...stockWarnings, ...globalStockWarnings];
+  const targetWarnings =
+    targetCashYen > 0 && shortageYen > 0
+      ? [`今の販売計画では、目標まで${shortageYen.toLocaleString("ja-JP")}円足りません。`]
+      : [];
+  const dataWarnings =
+    validResults.length > 0
+      ? ["現時点では費用を引く前の金額です。包装費・送料・手数料などはまだ反映していません。"]
+      : [];
 
   const missingItems = [
     targetCashYen <= 0 ? "目標：今年いくら手元に残したいかを入れてください。" : "",
@@ -149,6 +157,9 @@ export function calculateSummary(
     stockWarnings: allStockWarnings,
     harvestStockWarnings: stockWarnings,
     globalStockWarnings,
+    targetWarnings,
+    hypothesisWarnings: missingItems,
+    dataWarnings,
     missingItems,
     hasMissingItems: missingItems.length > 0,
     hasStockWarnings: allStockWarnings.length > 0,

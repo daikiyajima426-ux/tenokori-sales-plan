@@ -116,13 +116,13 @@ export function createSampleData(): AppData {
   const plan = createEmptyPlan();
   plan.cropName = "ぶどう";
   plan.varietyName = "シャインマスカット";
-  plan.targetCashYen = 1200000;
+  plan.targetCashYen = 800000;
   plan.nextYearTargetCashYen = 3000000;
   plan.memo = "複数の売り方で目標に近づける";
 
   const harvestCards: HarvestCard[] = [
-    { ...createHarvestCard(1), name: "通常品", amount: 120 },
-    { ...createHarvestCard(2), name: "規格外", amount: 20 },
+    { ...createHarvestCard(1), name: "通常品", amount: 150 },
+    { ...createHarvestCard(2), name: "規格外", amount: 25 },
     { ...createHarvestCard(3), name: "加工向け", amount: 15 }
   ];
 
@@ -131,7 +131,7 @@ export function createSampleData(): AppData {
       ...createProductCard(1),
       name: "直売所用",
       unitName: "袋",
-      quantityPerUnit: 300,
+      quantityPerUnit: 350,
       quantityUnit: "g"
     },
     {
@@ -156,23 +156,23 @@ export function createSampleData(): AppData {
       name: "直売所で袋売り",
       harvestId: harvestCards[0].id,
       productId: productCards[0].id,
-      pricePerUnit: 500,
-      plannedUnits: 200
+      pricePerUnit: 1800,
+      plannedUnits: 180
     },
     {
       ...createSalesPlanCard(2),
       name: "飲食店向け箱売り",
       harvestId: harvestCards[0].id,
       productId: productCards[1].id,
-      pricePerUnit: 2000,
-      plannedUnits: 30
+      pricePerUnit: 11000,
+      plannedUnits: 35
     },
     {
       ...createSalesPlanCard(3),
       name: "規格外まとめ売り",
       harvestId: harvestCards[1].id,
       productId: productCards[2].id,
-      pricePerUnit: 250,
+      pricePerUnit: 900,
       plannedUnits: 20
     }
   ];
@@ -184,5 +184,21 @@ export function createSampleData(): AppData {
     productCards,
     salesPlanCards,
     settings: createDefaultSettings()
+  };
+}
+
+export function createWarningSampleData(): AppData {
+  const sample = createSampleData();
+  return {
+    ...sample,
+    salesPlanCards: sample.salesPlanCards.map((card, index) =>
+      index === 0
+        ? {
+            ...card,
+            name: "直売所で袋売り（多め）",
+            plannedUnits: 300
+          }
+        : card
+    )
   };
 }

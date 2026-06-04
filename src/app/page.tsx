@@ -16,6 +16,7 @@ import {
   createHarvestCard,
   createProductCard,
   createSampleData,
+  createWarningSampleData,
   createSalesPlanCard,
   duplicateHarvestCard,
   duplicateProductCard,
@@ -132,6 +133,18 @@ function Notice({ children }: { children: React.ReactNode }) {
     <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
       {children}
     </p>
+  );
+}
+
+function AttentionGroup({ title, items }: { title: string; items: string[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div>
+      <p className="text-sm font-black text-stone-800">{title}</p>
+      <div className="mt-2 space-y-2">
+        {items.map((item) => <Notice key={`${title}-${item}`}>{item}</Notice>)}
+      </div>
+    </div>
   );
 }
 
@@ -261,13 +274,13 @@ export default function Home() {
   const updatePlan = (patch: Partial<Plan>) =>
     setPlan((current) => ({ ...current, ...patch, updatedAt: nowIso(), schemaVersion: SCHEMA_VERSION }));
 
-  const loadSample = () => {
+  const loadSample = (withWarnings = false) => {
     const ok =
       harvestCards.length > 0 || productCards.length > 0 || salesPlanCards.length > 0
         ? window.confirm("現在の保存データをサンプルデータで上書きします。よろしいですか。")
         : true;
     if (!ok) return;
-    const sample = createSampleData();
+    const sample = withWarnings ? createWarningSampleData() : createSampleData();
     setPlan(sample.plan);
     setHarvestCards(sample.harvestCards);
     setProductCards(sample.productCards);
@@ -330,7 +343,10 @@ export default function Home() {
             <p className="text-sm font-bold text-leaf">複数カードを合算して、目標に届くかを見る。</p>
             <h1 className="mt-1 text-3xl font-black tracking-normal text-stone-950">手残り販売計画</h1>
           </div>
-          <button className={`${secondaryButton} no-print`} onClick={loadSample}>サンプル投入</button>
+          <div className="flex flex-wrap gap-2">
+            <button className={`${secondaryButton} no-print`} onClick={() => loadSample(false)}>基本サンプル</button>
+            <button className={`${secondaryButton} no-print`} onClick={() => loadSample(true)}>警告サンプル</button>
+          </div>
         </div>
       </header>
 
@@ -650,7 +666,7 @@ function SalesPlanCardsTab({
           <CardShell
             key={card.id}
             title={`${card.name || `販売計画${index + 1}`}：${missing ? "売る形・売値・販売数が未入力" : `${product?.name || "売る形"} ${yen(card.pricePerUnit)} × ${card.plannedUnits}${product?.unitName || "個"}`}`}
-            summary={missing ? result.missing.join(" / ") : `使用量 ${kg(result.usedKg)}、見込み ${yen(result.takeHomeYen)}`}
+            summary={missing ? result.missing.join(" / ") : `使用量 ${kg(result.usedKg)}、費用未反映の見込み ${yen(result.takeHomeYen)}`}
             isOpen={openCards[card.id] ?? true}
             onToggle={() => toggleCard(card.id)}
             actions={
@@ -687,7 +703,7 @@ function SalesPlanCardsTab({
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Metric label="使用量" value={kg(result.usedKg)} />
               <Metric label="売上" value={yen(result.salesYen)} />
-              <Metric label="手残り見込み" value={yen(result.takeHomeYen)} strong />
+              <Metric label="費用未反映の見込み額" value={yen(result.takeHomeYen)} strong />
             </div>
           </CardShell>
         );
@@ -737,18 +753,23 @@ function ResultTab({
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
         <Metric label="目標手残り" value={yen(summary.targetCashYen)} strong />
-        <Metric label="全体見込み手残り" value={yen(summary.totalTakeHomeYen)} strong />
+        <Metric label="販売見込み額" value={yen(summary.totalTakeHomeYen)} strong />
         <Metric label="差額" value={yen(summary.targetGapYen)} strong />
         <Metric label="達成率" value={percent(summary.achievementRate)} />
       </div>
       <div className={panelClass}>
         <h3 className="text-lg font-black">注意・警告</h3>
-        <div className="mt-3 space-y-2">
-          {summary.stockWarnings.length === 0 && !summary.hasMissingItems ? (
-            <p className="text-sm font-semibold text-stone-700">大きな注意はありません。</p>
+        <div className="mt-3 space-y-4">
+          <AttentionGroup title="データ注意" items={summary.dataWarnings} />
+          <AttentionGroup title="在庫注意" items={summary.stockWarnings} />
+          <AttentionGroup title="目標注意" items={summary.targetWarnings} />
+          <AttentionGroup title="仮説不足" items={summary.hypothesisWarnings} />
+          {summary.stockWarnings.length === 0 ? (
+            <div>
+              <p className="text-sm font-black text-stone-800">在庫面の確認</p>
+              <p className="mt-2 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">在庫面では大きな超過はありません。</p>
+            </div>
           ) : null}
-          {summary.stockWarnings.map((message) => <Notice key={message}>{message}</Notice>)}
-          {summary.hasMissingItems ? <Notice>まだ決めていない項目があります。下の「次に決めること」で確認できます。</Notice> : null}
         </div>
       </div>
       <div className={panelClass}>
@@ -771,7 +792,7 @@ function ResultTab({
               <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <Metric label="使用量" value={kg(row.usedKg)} />
                 <Metric label="売上" value={yen(row.salesYen)} />
-                <Metric label="手残り見込み" value={yen(row.takeHomeYen)} strong />
+                <Metric label="費用未反映の見込み額" value={yen(row.takeHomeYen)} strong />
               </div>
               {row.missing.length > 0 ? <p className="mt-2 text-sm font-semibold text-amber-900">{row.missing.join(" / ")}</p> : null}
             </div>
@@ -781,7 +802,7 @@ function ResultTab({
       <CardShell title="詳しい数字を見る" summary={detailsOpen ? "表示中" : "閉じています"} isOpen={detailsOpen} onToggle={() => setDetailsOpen(!detailsOpen)}>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Metric label="全体売上" value={yen(summary.totalSalesYen)} />
-          <Metric label="全体手残り" value={yen(summary.totalTakeHomeYen)} strong />
+          <Metric label="販売見込み額" value={yen(summary.totalTakeHomeYen)} strong />
           <Metric label="合計使用量" value={kg(summary.totalUsedKg)} />
           <Metric label="未使用量" value={kg(summary.totalUnusedKg)} />
           <Metric label="必要単価の目安" value={priceGuide === null ? "未設定" : yen(priceGuide)} />
@@ -834,7 +855,7 @@ function buildTextOutput(
     "",
     `作物名: ${plan.cropName || "未入力"}`,
     `目標手残り: ${yen(plan.targetCashYen)}`,
-    `全体見込み手残り: ${yen(summary.totalTakeHomeYen)}`,
+    `販売見込み額（費用未反映）: ${yen(summary.totalTakeHomeYen)}`,
     `差額: ${yen(summary.targetGapYen)}`,
     `達成率: ${percent(summary.achievementRate)}`,
     "",
