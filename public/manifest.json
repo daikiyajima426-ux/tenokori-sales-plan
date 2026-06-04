@@ -1,7 +1,7 @@
 {
   "name": "手残り販売計画",
   "short_name": "手残り計画",
-  "description": "入力は現場単位。比較はkg換算。判断は手残り。",
+  "description": "今年いくら手元に残したいかから、売り方を考える農家向け販売計画アプリ。",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#fffaf1",
@@ -15,4 +15,3 @@
     }
   ]
 }
-

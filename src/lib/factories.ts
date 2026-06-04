@@ -1,11 +1,5 @@
 import { SCHEMA_VERSION } from "@/lib/constants";
-import type {
-  AllocationItem,
-  HarvestInput,
-  Plan,
-  ProductSpec,
-  UnitDefinition
-} from "@/types/domain";
+import type { Harvest, Plan, Product, Trial, Unit } from "@/types/domain";
 
 export const createId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -20,28 +14,29 @@ export function createEmptyPlan(): Plan {
     id: createId(),
     cropName: "",
     varietyName: "",
-    requiredCashYen: 0,
+    targetCashYen: 0,
+    nextYearTargetCashYen: 0,
     memo: "",
+    schemaVersion: SCHEMA_VERSION,
     createdAt: now,
-    updatedAt: now,
-    schemaVersion: SCHEMA_VERSION
+    updatedAt: now
   };
 }
 
-export function createKgUnit(): UnitDefinition {
+export function createKgUnit(): Unit {
   const now = nowIso();
   return {
     id: "unit-kg",
     name: "kg",
     label: "1kg",
     weightKg: 1,
-    memo: "標準単位",
+    memo: "標準の重さ",
     createdAt: now,
     updatedAt: now
   };
 }
 
-export function createUnit(): UnitDefinition {
+export function createUnit(): Unit {
   const now = nowIso();
   return {
     id: createId(),
@@ -54,7 +49,7 @@ export function createUnit(): UnitDefinition {
   };
 }
 
-export function createHarvest(planId: string, unitId = "unit-kg"): HarvestInput {
+export function createHarvest(planId: string, unitId = "unit-kg"): Harvest {
   const now = nowIso();
   return {
     id: createId(),
@@ -68,36 +63,33 @@ export function createHarvest(planId: string, unitId = "unit-kg"): HarvestInput 
   };
 }
 
-export function createSpec(planId: string, unitId = "unit-kg"): ProductSpec {
+export function createProduct(planId: string, unitId = "unit-kg"): Product {
   const now = nowIso();
   return {
     id: createId(),
     planId,
     name: "",
-    type: "weight",
-    unitId,
-    quantityPerSpec: 1,
+    category: "standard",
+    contentUnitId: unitId,
+    contentQuantity: 1,
     salesUnitLabel: "",
-    pricePerSpecYen: 0,
-    packagingCostPerSpecYen: 0,
-    shippingCostPerSpecYen: 0,
-    feePerSpecYen: 0,
-    otherCostPerSpecYen: 0,
+    priceYen: 0,
+    packageCostYen: 0,
+    shippingCostYen: 0,
+    feeYen: 0,
+    otherCostYen: 0,
     memo: "",
     createdAt: now,
     updatedAt: now
   };
 }
 
-export function createAllocation(
-  planId: string,
-  productSpecId = ""
-): AllocationItem {
+export function createTrial(planId: string, productId = ""): Trial {
   const now = nowIso();
   return {
     id: createId(),
     planId,
-    productSpecId,
+    productId,
     inputMode: "count",
     count: 0,
     inputWeightKg: 0,
@@ -111,78 +103,73 @@ export function createSampleData() {
   const plan = createEmptyPlan();
   plan.cropName = "ぶどう";
   plan.varietyName = "シャインマスカット";
-  plan.requiredCashYen = 1200000;
-  plan.memo = "v0.2.0 サンプルデータ";
+  plan.targetCashYen = 1200000;
+  plan.nextYearTargetCashYen = 3000000;
+  plan.memo = "今年は固定客を増やしたい";
 
   const kgUnit = createKgUnit();
   const boxUnit = { ...createUnit(), name: "箱", label: "1箱", weightKg: 5 };
   const bunchUnit = { ...createUnit(), name: "房", label: "1房", weightKg: 0.55 };
-  const caseUnit = {
-    ...createUnit(),
-    name: "ケース",
-    label: "1ケース",
-    weightKg: 10
-  };
-  const units = [kgUnit, boxUnit, bunchUnit, caseUnit];
+  const units = [kgUnit, boxUnit, bunchUnit];
 
-  const harvests: HarvestInput[] = [
+  const harvests: Harvest[] = [
     { ...createHarvest(plan.id, boxUnit.id), name: "第1収穫分", quantity: 5 },
     { ...createHarvest(plan.id, bunchUnit.id), name: "第2収穫分", quantity: 120 },
     { ...createHarvest(plan.id, kgUnit.id), name: "業務用分", quantity: 80 }
   ];
 
-  const specs: ProductSpec[] = [
+  const products: Product[] = [
     {
-      ...createSpec(plan.id, kgUnit.id),
+      ...createProduct(plan.id, kgUnit.id),
       name: "2kg箱",
-      type: "weight",
-      quantityPerSpec: 2,
+      category: "premium",
+      contentQuantity: 2,
       salesUnitLabel: "箱",
-      pricePerSpecYen: 4200,
-      packagingCostPerSpecYen: 250,
-      shippingCostPerSpecYen: 900,
-      feePerSpecYen: 150
+      priceYen: 4200,
+      packageCostYen: 250,
+      shippingCostYen: 900,
+      feeYen: 150
     },
     {
-      ...createSpec(plan.id, kgUnit.id),
+      ...createProduct(plan.id, kgUnit.id),
       name: "500g袋",
-      type: "weight",
-      quantityPerSpec: 0.5,
+      category: "trial",
+      contentQuantity: 0.5,
       salesUnitLabel: "袋",
-      pricePerSpecYen: 800,
-      packagingCostPerSpecYen: 30
+      priceYen: 800,
+      packageCostYen: 30
     },
     {
-      ...createSpec(plan.id, bunchUnit.id),
+      ...createProduct(plan.id, bunchUnit.id),
       name: "3房入り箱",
-      type: "unit",
-      quantityPerSpec: 3,
+      category: "standard",
+      contentQuantity: 3,
       salesUnitLabel: "箱",
-      pricePerSpecYen: 3600,
-      packagingCostPerSpecYen: 220,
-      shippingCostPerSpecYen: 800,
-      feePerSpecYen: 120
+      priceYen: 3600,
+      packageCostYen: 250,
+      shippingCostYen: 900,
+      feeYen: 150
     },
     {
-      ...createSpec(plan.id, kgUnit.id),
+      ...createProduct(plan.id, kgUnit.id),
       name: "訳あり1kg袋",
-      type: "weight",
-      quantityPerSpec: 1,
+      category: "b_grade",
+      contentQuantity: 1,
       salesUnitLabel: "袋",
-      pricePerSpecYen: 1000,
-      packagingCostPerSpecYen: 30
+      priceYen: 1000,
+      packageCostYen: 30
     }
   ];
 
-  const allocations: AllocationItem[] = [
-    { ...createAllocation(plan.id, specs[0].id), inputMode: "count", count: 20 },
+  const trials: Trial[] = [
+    { ...createTrial(plan.id, products[0].id), inputMode: "count", count: 20 },
     {
-      ...createAllocation(plan.id, specs[1].id),
+      ...createTrial(plan.id, products[1].id),
       inputMode: "weight",
       inputWeightKg: 30
     },
-    { ...createAllocation(plan.id, specs[2].id), inputMode: "count", count: 10 }
+    { ...createTrial(plan.id, products[2].id), inputMode: "count", count: 10 }
   ];
 
-  return { plan, units, harvests, specs, allocations };
+  return { plan, units, harvests, products, trials };
 }

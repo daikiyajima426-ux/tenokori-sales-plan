@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "手残り販売計画",
-  description: "入力は現場単位。単位間は自由に換算。判断は手残り。",
+  description: "今年いくら手元に残したいかから、売り方を考える農家向け販売計画アプリ。",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

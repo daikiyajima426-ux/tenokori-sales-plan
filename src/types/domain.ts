@@ -2,14 +2,15 @@ export type Plan = {
   id: string;
   cropName: string;
   varietyName?: string;
-  requiredCashYen: number;
+  targetCashYen: number;
+  nextYearTargetCashYen?: number;
   memo?: string;
+  schemaVersion: number;
   createdAt: string;
   updatedAt: string;
-  schemaVersion: number;
 };
 
-export type UnitDefinition = {
+export type Unit = {
   id: string;
   name: string;
   label: string;
@@ -19,7 +20,7 @@ export type UnitDefinition = {
   updatedAt: string;
 };
 
-export type HarvestInput = {
+export type Harvest = {
   id: string;
   planId: string;
   name: string;
@@ -30,33 +31,39 @@ export type HarvestInput = {
   updatedAt: string;
 };
 
-export type ProductSpecType = "weight" | "unit";
+export type ProductCategory =
+  | "premium"
+  | "standard"
+  | "trial"
+  | "b_grade"
+  | "wholesale"
+  | "other";
 
-export type ProductSpec = {
+export type Product = {
   id: string;
   planId: string;
   name: string;
-  type: ProductSpecType;
-  unitId: string;
-  quantityPerSpec: number;
+  category: ProductCategory;
+  contentUnitId: string;
+  contentQuantity: number;
   salesUnitLabel: string;
-  pricePerSpecYen: number;
-  packagingCostPerSpecYen: number;
-  shippingCostPerSpecYen: number;
-  feePerSpecYen: number;
-  otherCostPerSpecYen: number;
+  priceYen: number;
+  packageCostYen: number;
+  shippingCostYen: number;
+  feeYen: number;
+  otherCostYen: number;
   memo?: string;
   createdAt: string;
   updatedAt: string;
 };
 
-export type AllocationInputMode = "count" | "weight";
+export type TrialInputMode = "count" | "weight";
 
-export type AllocationItem = {
+export type Trial = {
   id: string;
   planId: string;
-  productSpecId: string;
-  inputMode: AllocationInputMode;
+  productId: string;
+  inputMode: TrialInputMode;
   count?: number;
   inputWeightKg?: number;
   memo?: string;
@@ -66,15 +73,16 @@ export type AllocationItem = {
 
 export type Settings = {
   activeTab: string;
+  hasSeenIntro: boolean;
 };
 
 export type ExportData = {
   appName: "手残り販売計画";
-  appVersion: "0.2.0";
+  appVersion: "1.0.0";
   exportedAt: string;
   plan: Plan;
-  unitDefinitions: UnitDefinition[];
-  harvestInputs: HarvestInput[];
-  productSpecs: ProductSpec[];
-  allocationItems: AllocationItem[];
+  units: Unit[];
+  harvests: Harvest[];
+  products: Product[];
+  trials: Trial[];
 };
