@@ -64,6 +64,7 @@ export function createSalesPlanCard(index: number): SalesPlanCard {
     name: `販売計画${index}`,
     harvestId: undefined,
     productId: undefined,
+    productRole: "unset",
     pricePerUnit: 0,
     plannedUnits: 0,
     memo: "",
@@ -116,12 +117,12 @@ export function createSampleData(): AppData {
   const plan = createEmptyPlan();
   plan.cropName = "ぶどう";
   plan.varietyName = "シャインマスカット";
-  plan.targetCashYen = 800000;
+  plan.targetCashYen = 1000000;
   plan.nextYearTargetCashYen = 3000000;
-  plan.memo = "複数の売り方で目標に近づける";
+  plan.memo = "複数の役割の商品で目標に近づける";
 
   const harvestCards: HarvestCard[] = [
-    { ...createHarvestCard(1), name: "通常品", amount: 150 },
+    { ...createHarvestCard(1), name: "通常品", amount: 210 },
     { ...createHarvestCard(2), name: "規格外", amount: 25 },
     { ...createHarvestCard(3), name: "加工向け", amount: 15 }
   ];
@@ -129,23 +130,37 @@ export function createSampleData(): AppData {
   const productCards: ProductCard[] = [
     {
       ...createProductCard(1),
-      name: "直売所用",
+      name: "少量お試し",
+      unitName: "袋",
+      quantityPerUnit: 250,
+      quantityUnit: "g"
+    },
+    {
+      ...createProductCard(2),
+      name: "通常パック",
       unitName: "袋",
       quantityPerUnit: 350,
       quantityUnit: "g"
     },
     {
-      ...createProductCard(2),
-      name: "飲食店用",
+      ...createProductCard(3),
+      name: "贈答用",
       unitName: "箱",
       quantityPerUnit: 2,
       quantityUnit: "kg"
     },
     {
-      ...createProductCard(3),
+      ...createProductCard(4),
       name: "規格外まとめ売り",
       unitName: "kg",
       quantityPerUnit: 1,
+      quantityUnit: "kg"
+    },
+    {
+      ...createProductCard(5),
+      name: "高単価セット",
+      unitName: "セット",
+      quantityPerUnit: 3,
       quantityUnit: "kg"
     }
   ];
@@ -153,27 +168,48 @@ export function createSampleData(): AppData {
   const salesPlanCards: SalesPlanCard[] = [
     {
       ...createSalesPlanCard(1),
-      name: "直売所で袋売り",
+      name: "初回お試し袋",
       harvestId: harvestCards[0].id,
       productId: productCards[0].id,
+      productRole: "entry",
+      pricePerUnit: 900,
+      plannedUnits: 100
+    },
+    {
+      ...createSalesPlanCard(2),
+      name: "直売所の通常パック",
+      harvestId: harvestCards[0].id,
+      productId: productCards[1].id,
+      productRole: "daily",
       pricePerUnit: 1800,
       plannedUnits: 180
     },
     {
-      ...createSalesPlanCard(2),
-      name: "飲食店向け箱売り",
+      ...createSalesPlanCard(3),
+      name: "贈答向け箱売り",
       harvestId: harvestCards[0].id,
-      productId: productCards[1].id,
+      productId: productCards[2].id,
+      productRole: "brand",
       pricePerUnit: 11000,
       plannedUnits: 35
     },
     {
-      ...createSalesPlanCard(3),
+      ...createSalesPlanCard(4),
       name: "規格外まとめ売り",
       harvestId: harvestCards[1].id,
-      productId: productCards[2].id,
+      productId: productCards[3].id,
+      productRole: "lossReduction",
       pricePerUnit: 900,
       plannedUnits: 20
+    },
+    {
+      ...createSalesPlanCard(5),
+      name: "高単価セット販売",
+      harvestId: harvestCards[0].id,
+      productId: productCards[4].id,
+      productRole: "profit",
+      pricePerUnit: 18000,
+      plannedUnits: 10
     }
   ];
 
@@ -195,10 +231,21 @@ export function createWarningSampleData(): AppData {
       index === 0
         ? {
             ...card,
-            name: "直売所で袋売り（多め）",
-            plannedUnits: 300
+            name: "初回お試し袋（多め）",
+            productRole: "entry",
+            plannedUnits: 500
           }
-        : card
+        : index === 1 || index === 2 || index === 4
+          ? {
+              ...card,
+              productRole: "entry"
+            }
+          : index === 3
+            ? {
+                ...card,
+                productRole: "unset"
+              }
+            : card
     )
   };
 }

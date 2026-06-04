@@ -19,3 +19,30 @@ export const TABS = [
   { id: "trials", label: "販売計画" },
   { id: "result", label: "結果" }
 ] as const;
+
+export const PRODUCT_ROLE_OPTIONS = [
+  { value: "unset", label: "未設定" },
+  { value: "entry", label: "入口商品" },
+  { value: "daily", label: "日常商品" },
+  { value: "profit", label: "利益商品" },
+  { value: "brand", label: "ブランド商品" },
+  { value: "lossReduction", label: "ロス削減商品" }
+] as const;
+
+export const PRODUCT_ROLE_LABELS = {
+  unset: "役割未設定",
+  entry: "入口商品",
+  daily: "日常商品",
+  profit: "利益商品",
+  brand: "ブランド商品",
+  lossReduction: "ロス削減商品"
+} as const;
+
+export const PRODUCT_ROLE_ORDER = [
+  "entry",
+  "daily",
+  "profit",
+  "brand",
+  "lossReduction",
+  "unset"
+] as const;

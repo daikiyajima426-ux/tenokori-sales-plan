@@ -31,11 +31,20 @@ export type ProductCard = {
   updatedAt: string;
 };
 
+export type ProductRole =
+  | "entry"
+  | "daily"
+  | "profit"
+  | "brand"
+  | "lossReduction"
+  | "unset";
+
 export type SalesPlanCard = {
   id: string;
   name: string;
   harvestId?: string;
   productId?: string;
+  productRole: ProductRole;
   pricePerUnit: number;
   plannedUnits: number;
   memo?: string;

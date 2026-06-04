@@ -10,6 +10,7 @@ import type {
   LegacyUnit,
   Plan,
   ProductCard,
+  ProductRole,
   SalesPlanCard,
   Settings
 } from "@/types/domain";
@@ -27,6 +28,38 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 
 const safeNumber = (value: unknown) =>
   typeof value === "number" && Number.isFinite(value) ? value : 0;
+
+const productRoles = new Set<ProductRole>([
+  "entry",
+  "daily",
+  "profit",
+  "brand",
+  "lossReduction",
+  "unset"
+]);
+
+function normalizeProductRole(value: unknown): ProductRole {
+  return typeof value === "string" && productRoles.has(value as ProductRole)
+    ? (value as ProductRole)
+    : "unset";
+}
+
+function normalizeSalesPlanCard(card: SalesPlanCard): SalesPlanCard {
+  return {
+    ...card,
+    productRole: normalizeProductRole((card as { productRole?: unknown }).productRole)
+  };
+}
+
+function normalizeAppData(data: AppData): AppData {
+  return {
+    ...data,
+    schemaVersion: 5,
+    plan: { ...data.plan, schemaVersion: SCHEMA_VERSION },
+    salesPlanCards: data.salesPlanCards.map(normalizeSalesPlanCard),
+    settings: data.settings ?? createDefaultSettings()
+  };
+}
 
 export function loadJson<T>(key: string): { value?: T; error?: string } {
   try {
@@ -79,14 +112,14 @@ export function migrateLegacyState(input: {
 }): AppData | null {
   if (!input.plan) return null;
   if (input.plan.schemaVersion === 5) {
-    return {
+    return normalizeAppData({
       schemaVersion: 5,
       plan: input.plan,
       harvestCards: (input.harvests ?? []) as HarvestCard[],
       productCards: (input.products ?? []) as ProductCard[],
       salesPlanCards: (input.trials ?? []) as SalesPlanCard[],
       settings: input.settings ?? createDefaultSettings()
-    };
+    });
   }
 
   const units = input.units ?? [];
@@ -134,6 +167,7 @@ export function migrateLegacyState(input: {
       name: `販売計画${index + 1}`,
       harvestId: harvestCards[0]?.id,
       productId: trial.productId || undefined,
+      productRole: "unset",
       pricePerUnit: safeNumber(product?.priceYen),
       plannedUnits: count,
       memo: trial.memo ?? "",
@@ -142,14 +176,14 @@ export function migrateLegacyState(input: {
     };
   });
 
-  return {
+  return normalizeAppData({
     schemaVersion: 5,
     plan: { ...input.plan, schemaVersion: SCHEMA_VERSION },
     harvestCards,
     productCards,
     salesPlanCards,
     settings: input.settings ?? createDefaultSettings()
-  };
+  });
 }
 
 export function getImportValidationError(value: unknown) {
@@ -168,7 +202,7 @@ export function getImportValidationError(value: unknown) {
 
 export function readExportData(value: unknown): AppData | null {
   if (!isObject(value)) return null;
-  if (isObject(value.data)) return value.data as AppData;
+  if (isObject(value.data)) return normalizeAppData(value.data as AppData);
   return migrateLegacyState({
     plan: isObject(value.plan) ? (value.plan as Plan) : undefined,
     units: Array.isArray(value.units) ? (value.units as LegacyUnit[]) : [],

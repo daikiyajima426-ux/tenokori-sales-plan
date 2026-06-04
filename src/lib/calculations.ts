@@ -1,9 +1,11 @@
 import type {
   HarvestCard,
   Plan,
+  ProductRole,
   ProductCard,
   SalesPlanCard
 } from "@/types/domain";
+import { PRODUCT_ROLE_LABELS, PRODUCT_ROLE_ORDER } from "@/lib/constants";
 
 const safeNumber = (value: number | undefined | null) =>
   Number.isFinite(value) ? Number(value) : 0;
@@ -29,9 +31,7 @@ export function calculateSalesPlan(
   const salesYen = pricePerUnit * plannedUnits;
   const missing: string[] = [];
 
-  if (card.harvestId && !harvest) {
-    missing.push(`${card.name}：取れた量が未選択です`);
-  }
+  if (!harvest) missing.push(`${card.name}：取れた量が未選択です`);
   if (!product) missing.push(`${card.name}：売る形が未選択です`);
   if (unitKg <= 0) missing.push(`${card.name}：売る形の中身が未入力です`);
   if (pricePerUnit <= 0) missing.push(`${card.name}：売値が未入力です`);
@@ -123,6 +123,59 @@ export function calculateSummary(
     validResults.length > 0
       ? ["現時点では費用を引く前の金額です。包装費・送料・手数料などはまだ反映していません。"]
       : [];
+  const roleOf = (card: SalesPlanCard): ProductRole => card.productRole ?? "unset";
+  const compositionRows = PRODUCT_ROLE_ORDER.map((role) => {
+    const roleResults = salesResults.filter((row) => roleOf(row.card) === role);
+    const roleValidResults = validResults.filter((row) => roleOf(row.card) === role);
+    const salesYen = roleValidResults.reduce((sum, row) => sum + row.salesYen, 0);
+    return {
+      role,
+      label: PRODUCT_ROLE_LABELS[role],
+      count: roleResults.length,
+      validCount: roleValidResults.length,
+      salesYen,
+      plannedUnits: roleResults.reduce((sum, row) => sum + safeNumber(row.card.plannedUnits), 0),
+      usedKg: roleResults.reduce((sum, row) => sum + row.usedKg, 0),
+      salesShare: safeDivide(salesYen, totalSalesYen)
+    };
+  });
+  const roleCounts = new Map<ProductRole, number>(
+    PRODUCT_ROLE_ORDER.map((role) => [
+      role,
+      salesResults.filter((row) => roleOf(row.card) === role).length
+    ])
+  );
+  const validRoleCounts = new Map<ProductRole, number>(
+    PRODUCT_ROLE_ORDER.map((role) => [
+      role,
+      validResults.filter((row) => roleOf(row.card) === role).length
+    ])
+  );
+  const hasSalesPlans = salesResults.length > 0;
+  const entryValidCount = validRoleCounts.get("entry") ?? 0;
+  const profitValidCount = validRoleCounts.get("profit") ?? 0;
+  const compositionWarnings = [
+    hasSalesPlans && (roleCounts.get("entry") ?? 0) === 0
+      ? "初めて買う人向けの商品がありません。少量・低価格のお試し商品があると、買う不安を下げやすくなります。"
+      : "",
+    hasSalesPlans && (roleCounts.get("profit") ?? 0) === 0
+      ? "利益を作る商品がありません。買いやすい商品だけだと、販売数が増えても手元に残りにくい可能性があります。"
+      : "",
+    hasSalesPlans && (roleCounts.get("brand") ?? 0) === 0
+      ? "品質や印象を作る商品がありません。高品質品・贈答品・見せたい商品を用意すると、ブランドの入口を作りやすくなります。"
+      : "",
+    hasSalesPlans && (roleCounts.get("lossReduction") ?? 0) === 0
+      ? "規格外や余りの出口になる商品がありません。訳あり品や加工向けの商品があると、ロスを減らせる可能性があります。"
+      : "",
+    hasSalesPlans && (roleCounts.get("unset") ?? 0) > 0
+      ? "役割が未設定の販売計画があります。この商品が入口・日常・利益・ブランド・ロス削減のどれに近いかを決めると、販売計画を見直しやすくなります。"
+      : "",
+    validResults.length > 0 &&
+    entryValidCount >= Math.ceil(validResults.length / 2) &&
+    profitValidCount === 0
+      ? "入口商品に偏っています。買いやすさはありますが、利益を作る商品も用意しないと手元に残りにくい可能性があります。"
+      : ""
+  ].filter(Boolean);
 
   const missingItems = [
     targetCashYen <= 0 ? "目標：今年いくら手元に残したいかを入れてください。" : "",
@@ -158,6 +211,8 @@ export function calculateSummary(
     harvestStockWarnings: stockWarnings,
     globalStockWarnings,
     targetWarnings,
+    compositionRows,
+    compositionWarnings,
     hypothesisWarnings: missingItems,
     dataWarnings,
     missingItems,

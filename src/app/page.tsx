@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { SCHEMA_VERSION, STORAGE_KEYS, TABS } from "@/lib/constants";
+import {
+  PRODUCT_ROLE_LABELS,
+  PRODUCT_ROLE_OPTIONS,
+  SCHEMA_VERSION,
+  STORAGE_KEYS,
+  TABS
+} from "@/lib/constants";
 import {
   calculateSalesPlan,
   calculateSummary,
@@ -41,6 +47,7 @@ import type {
   LegacyUnit,
   Plan,
   ProductCard,
+  ProductRole,
   SalesPlanCard,
   Settings
 } from "@/types/domain";
@@ -662,10 +669,11 @@ function SalesPlanCardsTab({
         const harvest = harvestMap.get(card.harvestId ?? "");
         const result = calculateSalesPlan(card, harvest, product);
         const missing = result.missing.length > 0;
+        const roleLabel = PRODUCT_ROLE_LABELS[card.productRole ?? "unset"];
         return (
           <CardShell
             key={card.id}
-            title={`${card.name || `販売計画${index + 1}`}：${missing ? "売る形・売値・販売数が未入力" : `${product?.name || "売る形"} ${yen(card.pricePerUnit)} × ${card.plannedUnits}${product?.unitName || "個"}`}`}
+            title={`${card.name || `販売計画${index + 1}`}：${roleLabel}｜${missing ? "売る形・売値・販売数が未入力" : `${product?.name || "売る形"} ${yen(card.pricePerUnit)} × ${card.plannedUnits}${product?.unitName || "個"}`}`}
             summary={missing ? result.missing.join(" / ") : `使用量 ${kg(result.usedKg)}、費用未反映の見込み ${yen(result.takeHomeYen)}`}
             isOpen={openCards[card.id] ?? true}
             onToggle={() => toggleCard(card.id)}
@@ -692,6 +700,13 @@ function SalesPlanCardsTab({
                   <option value="">売る形未選択</option>
                   {productCards.map((row) => <option key={row.id} value={row.id}>{row.name || "名前未入力"}</option>)}
                 </select>
+              </label>
+              <label className="block">
+                <span className={labelClass}>商品役割</span>
+                <select className={inputClass} value={card.productRole ?? "unset"} onChange={(event) => updateCard(card.id, { productRole: event.target.value as ProductRole })}>
+                  {PRODUCT_ROLE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+                <span className="mt-1 block text-xs font-semibold text-stone-500">この販売計画が、買いやすさ・日常購入・利益・ブランド・ロス削減のどれに近いかを選びます。</span>
               </label>
               <NumberInput label="売値" unit="円" value={card.pricePerUnit} onChange={(pricePerUnit) => updateCard(card.id, { pricePerUnit })} placeholder="例：500" />
               <NumberInput label="販売予定数" unit={product?.unitName || "個"} value={card.plannedUnits} onChange={(plannedUnits) => updateCard(card.id, { plannedUnits })} placeholder="例：200" />
@@ -763,6 +778,7 @@ function ResultTab({
           <AttentionGroup title="データ注意" items={summary.dataWarnings} />
           <AttentionGroup title="在庫注意" items={summary.stockWarnings} />
           <AttentionGroup title="目標注意" items={summary.targetWarnings} />
+          <AttentionGroup title="商品構成注意" items={summary.compositionWarnings} />
           <AttentionGroup title="仮説不足" items={summary.hypothesisWarnings} />
           {summary.stockWarnings.length === 0 ? (
             <div>
@@ -770,6 +786,26 @@ function ResultTab({
               <p className="mt-2 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">在庫面では大きな超過はありません。</p>
             </div>
           ) : null}
+        </div>
+      </div>
+      <div className={panelClass}>
+        <h3 className="text-lg font-black">商品構成チェック</h3>
+        <p className="mt-1 text-sm font-semibold text-stone-600">販売計画を、入口・日常・利益・ブランド・ロス削減の役割ごとに見ます。</p>
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+          {summary.compositionRows.map((row) => (
+            <div key={row.role} className="rounded-md border border-stone-200 bg-stone-50 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-black text-stone-950">{row.label}</p>
+                <p className="rounded-full bg-white px-2 py-1 text-xs font-black text-stone-600 ring-1 ring-stone-200">{row.count}件</p>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <Metric label="販売見込み" value={yen(row.salesYen)} />
+                <Metric label="売上比率" value={percent(row.salesShare)} />
+                <Metric label="予定数" value={`${row.plannedUnits.toLocaleString("ja-JP")}単位`} />
+                <Metric label="使用量" value={kg(row.usedKg)} />
+              </div>
+            </div>
+          ))}
         </div>
       </div>
       <div className={panelClass}>
@@ -859,12 +895,16 @@ function buildTextOutput(
     `差額: ${yen(summary.targetGapYen)}`,
     `達成率: ${percent(summary.achievementRate)}`,
     "",
+    "商品構成",
+    ...summary.compositionRows.map((row) => `- ${row.label}: ${row.count}件 / 販売見込み ${yen(row.salesYen)} / 使用 ${kg(row.usedKg)} / 売上比率 ${percent(row.salesShare)}`),
+    "",
     "販売計画"
   ];
   salesPlanCards.forEach((card) => {
     const product = productMap.get(card.productId ?? "");
     const row = calculateSalesPlan(card, undefined, product);
-    lines.push(`- ${card.name}: ${product?.name || "売る形未選択"} / ${yen(card.pricePerUnit)} x ${card.plannedUnits}${product?.unitName || "個"} / 使用 ${kg(row.usedKg)} / 見込み ${yen(row.takeHomeYen)}`);
+    const roleLabel = PRODUCT_ROLE_LABELS[card.productRole ?? "unset"];
+    lines.push(`- ${card.name}: ${roleLabel} / ${product?.name || "売る形未選択"} / ${yen(card.pricePerUnit)} x ${card.plannedUnits}${product?.unitName || "個"} / 使用 ${kg(row.usedKg)} / 見込み ${yen(row.takeHomeYen)}`);
   });
   return lines.join("\n");
 }
