@@ -1,43 +1,47 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { SCHEMA_VERSION, STORAGE_KEYS, TABS } from "@/lib/constants";
 import {
-  PRODUCT_CATEGORY_LABELS,
-  STORAGE_KEYS,
-  TABS
-} from "@/lib/constants";
-import {
-  calculateHarvest,
-  calculateProduct,
+  calculateSalesPlan,
   calculateSummary,
-  calculateTrial
+  formatProductAmount,
+  productUnitKg,
+  requiredPricePerUnit,
+  round
 } from "@/lib/calculations";
 import {
+  createDefaultSettings,
   createEmptyPlan,
-  createHarvest,
-  createKgUnit,
-  createProduct,
+  createHarvestCard,
+  createProductCard,
   createSampleData,
-  createTrial,
-  createUnit,
+  createSalesPlanCard,
+  duplicateHarvestCard,
+  duplicateProductCard,
+  duplicateSalesPlanCard,
   nowIso
 } from "@/lib/factories";
 import {
   buildExportData,
   getImportValidationError,
   loadJson,
+  migrateLegacyState,
+  readExportData,
   saveState
 } from "@/lib/storage";
-import { kg, perKg, round, yen } from "@/lib/format";
+import { kg, yen } from "@/lib/format";
 import type {
-  ExportData,
-  Harvest,
+  AppData,
+  HarvestCard,
+  LegacyHarvest,
+  LegacyProduct,
+  LegacyTrial,
+  LegacyUnit,
   Plan,
-  Product,
-  ProductCategory,
-  Settings,
-  Trial,
-  Unit
+  ProductCard,
+  SalesPlanCard,
+  Settings
 } from "@/types/domain";
 
 type TabId = (typeof TABS)[number]["id"];
@@ -53,31 +57,31 @@ const secondaryButton =
 const dangerButton =
   "inline-flex items-center justify-center rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm font-bold text-red-800 transition hover:bg-red-100";
 
+const percent = (value: number | null) =>
+  value === null ? "未設定" : `${Math.round(value * 100).toLocaleString("ja-JP")}%`;
+
 function NumberInput({
   label,
   unit,
   value,
   onChange,
-  placeholder,
-  disabled
+  placeholder
 }: {
   label: string;
   unit: string;
   value: number;
   onChange: (value: number) => void;
   placeholder?: string;
-  disabled?: boolean;
 }) {
   return (
     <label className="block min-w-0">
       <span className={labelClass}>{label}</span>
       <span className="flex min-w-0 flex-col gap-1 rounded-md border border-stone-300 bg-white p-2 focus-within:border-leaf focus-within:ring-2 focus-within:ring-leaf/20 sm:flex-row sm:items-center sm:gap-0 sm:p-0">
         <input
-          className="w-full min-w-0 rounded-sm px-2 py-2 text-base outline-none disabled:bg-stone-100 sm:flex-1 sm:px-3"
-          disabled={disabled}
+          className="w-full min-w-0 rounded-sm px-2 py-2 text-base outline-none sm:flex-1 sm:px-3"
           inputMode="decimal"
-          type="number"
           min="0"
+          type="number"
           value={Number.isFinite(value) ? value : 0}
           placeholder={placeholder}
           onChange={(event) => onChange(Number(event.target.value || 0))}
@@ -114,34 +118,12 @@ function TextInput({
   );
 }
 
-function Metric({
-  label,
-  value,
-  strong
-}: {
-  label: string;
-  value: string;
-  strong?: boolean;
-}) {
+function Metric({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
-    <div
-      className={`rounded-md border p-3 ${
-        strong ? "border-leaf bg-green-50" : "border-stone-200 bg-stone-50"
-      }`}
-    >
+    <div className={`rounded-md border p-3 ${strong ? "border-leaf bg-green-50" : "border-stone-200 bg-stone-50"}`}>
       <p className="text-xs font-semibold text-stone-600">{label}</p>
-      <p className={`${strong ? "text-2xl" : "text-lg"} mt-1 font-black text-stone-950`}>
-        {value}
-      </p>
+      <p className={`${strong ? "text-2xl" : "text-lg"} mt-1 font-black text-stone-950`}>{value}</p>
     </div>
-  );
-}
-
-function Warning({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-800">
-      {children}
-    </p>
   );
 }
 
@@ -153,34 +135,67 @@ function Notice({ children }: { children: React.ReactNode }) {
   );
 }
 
-const percent = (value: number | null) =>
-  value === null ? "未設定" : `${Math.round(value * 100).toLocaleString("ja-JP")}%`;
+function CardShell({
+  title,
+  summary,
+  isOpen,
+  onToggle,
+  children,
+  actions
+}: {
+  title: string;
+  summary: string;
+  isOpen: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+  actions?: React.ReactNode;
+}) {
+  return (
+    <article className={panelClass}>
+      <button
+        type="button"
+        className="flex h-auto w-full items-start justify-between gap-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-3 text-left text-stone-950 transition hover:bg-stone-100"
+        onClick={onToggle}
+      >
+        <span className="min-w-0">
+          <span className="block text-base font-black">{isOpen ? "▾" : "▸"} {title}</span>
+          <span className="mt-1 block text-sm font-semibold leading-6 text-stone-600">{summary}</span>
+        </span>
+      </button>
+      {isOpen ? (
+        <div className="mt-4 space-y-4">
+          {children}
+          {actions ? <div className="flex flex-wrap gap-2 pt-2">{actions}</div> : null}
+        </div>
+      ) : null}
+    </article>
+  );
+}
 
 export default function Home() {
   const [plan, setPlan] = useState<Plan>(() => createEmptyPlan());
-  const [units, setUnits] = useState<Unit[]>(() => [createKgUnit()]);
-  const [harvests, setHarvests] = useState<Harvest[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [trials, setTrials] = useState<Trial[]>([]);
-  const [settings, setSettings] = useState<Settings>({
-    activeTab: "intro",
-    hasSeenIntro: false
-  });
-  const [loadErrors, setLoadErrors] = useState<string[]>([]);
-  const [saveError, setSaveError] = useState("");
+  const [harvestCards, setHarvestCards] = useState<HarvestCard[]>([]);
+  const [productCards, setProductCards] = useState<ProductCard[]>([]);
+  const [salesPlanCards, setSalesPlanCards] = useState<SalesPlanCard[]>([]);
+  const [settings, setSettings] = useState<Settings>(() => createDefaultSettings());
+  const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [dataOpen, setDataOpen] = useState(false);
+  const [messages, setMessages] = useState<string[]>([]);
+  const [saveMessage, setSaveMessage] = useState("");
   const [importMessage, setImportMessage] = useState("");
   const loadedRef = useRef(false);
   const skipNextSaveRef = useRef(false);
 
-  const activeTab = settings.activeTab as TabId;
   const summary = useMemo(
-    () => calculateSummary(plan, units, harvests, products, trials),
-    [plan, units, harvests, products, trials]
+    () => calculateSummary(plan, harvestCards, productCards, salesPlanCards),
+    [plan, harvestCards, productCards, salesPlanCards]
   );
   const textOutput = useMemo(
-    () => buildTextOutput(plan, units, harvests, products, trials),
-    [plan, units, harvests, products, trials]
+    () => buildTextOutput(plan, harvestCards, productCards, salesPlanCards),
+    [plan, harvestCards, productCards, salesPlanCards]
   );
+  const activeTab = settings.activeTab as TabId;
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
@@ -188,34 +203,39 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const errors: string[] = [];
+    const loadMessages: string[] = [];
     const loadedPlan = loadJson<Plan>(STORAGE_KEYS.plan);
-    const loadedUnits = loadJson<Unit[]>(STORAGE_KEYS.units);
-    const loadedHarvests = loadJson<Harvest[]>(STORAGE_KEYS.harvests);
-    const loadedProducts = loadJson<Product[]>(STORAGE_KEYS.products);
-    const loadedTrials = loadJson<Trial[]>(STORAGE_KEYS.trials);
+    const loadedUnits = loadJson<LegacyUnit[]>(STORAGE_KEYS.units);
+    const loadedHarvests = loadJson<HarvestCard[] | LegacyHarvest[]>(STORAGE_KEYS.harvests);
+    const loadedProducts = loadJson<ProductCard[] | LegacyProduct[]>(STORAGE_KEYS.products);
+    const loadedTrials = loadJson<SalesPlanCard[] | LegacyTrial[]>(STORAGE_KEYS.trials);
     const loadedSettings = loadJson<Settings>(STORAGE_KEYS.settings);
 
-    if (loadedPlan.error) errors.push(loadedPlan.error);
-    if (loadedUnits.error) errors.push(loadedUnits.error);
-    if (loadedHarvests.error) errors.push(loadedHarvests.error);
-    if (loadedProducts.error) errors.push(loadedProducts.error);
-    if (loadedTrials.error) errors.push(loadedTrials.error);
-    if (loadedSettings.error) errors.push(loadedSettings.error);
+    [loadedPlan, loadedUnits, loadedHarvests, loadedProducts, loadedTrials, loadedSettings].forEach((row) => {
+      if (row.error) loadMessages.push(row.error);
+    });
 
-    if (loadedPlan.value) setPlan(loadedPlan.value);
-    if (loadedUnits.value) setUnits(ensureKgUnit(loadedUnits.value));
-    if (loadedHarvests.value) setHarvests(loadedHarvests.value);
-    if (loadedProducts.value) setProducts(loadedProducts.value);
-    if (loadedTrials.value) setTrials(loadedTrials.value);
-    if (loadedSettings.value) {
-      setSettings({
-        activeTab: loadedSettings.value.activeTab || "intro",
-        hasSeenIntro: Boolean(loadedSettings.value.hasSeenIntro)
-      });
+    const migrated = migrateLegacyState({
+      plan: loadedPlan.value,
+      units: loadedUnits.value,
+      harvests: loadedHarvests.value,
+      products: loadedProducts.value,
+      trials: loadedTrials.value,
+      settings: loadedSettings.value
+    });
+
+    if (migrated) {
+      setPlan(migrated.plan);
+      setHarvestCards(migrated.harvestCards);
+      setProductCards(migrated.productCards);
+      setSalesPlanCards(migrated.salesPlanCards);
+      setSettings(migrated.settings ?? createDefaultSettings());
+      if (loadedPlan.value?.schemaVersion !== SCHEMA_VERSION) {
+        loadMessages.push("旧形式の保存データをカード形式へ変換しました。");
+      }
     }
-    if (errors.length > 0) skipNextSaveRef.current = true;
-    setLoadErrors(errors);
+    if (loadMessages.length > 0) skipNextSaveRef.current = true;
+    setMessages(loadMessages);
     loadedRef.current = true;
   }, []);
 
@@ -226,30 +246,51 @@ export default function Home() {
       return;
     }
     try {
-      saveState({ plan, units, harvests, products, trials, settings });
-      setSaveError("");
+      saveState({ plan, harvestCards, productCards, salesPlanCards, settings });
     } catch {
-      setSaveError("このデータは保存できません。ブラウザの保存容量や設定を確認してください。");
+      setSaveMessage("このデータは保存できません。ブラウザの保存容量や設定を確認してください。");
     }
-  }, [plan, units, harvests, products, trials, settings]);
+  }, [plan, harvestCards, productCards, salesPlanCards, settings]);
 
   const setActiveTab = (activeTab: TabId) =>
     setSettings((current) => ({ ...current, activeTab }));
-
+  const toggleCard = (id: string) =>
+    setOpenCards((current) => ({ ...current, [id]: !current[id] }));
+  const closeCard = (id: string) =>
+    setOpenCards((current) => ({ ...current, [id]: false }));
   const updatePlan = (patch: Partial<Plan>) =>
-    setPlan((current) => ({ ...current, ...patch, updatedAt: nowIso() }));
+    setPlan((current) => ({ ...current, ...patch, updatedAt: nowIso(), schemaVersion: SCHEMA_VERSION }));
+
+  const loadSample = () => {
+    const ok =
+      harvestCards.length > 0 || productCards.length > 0 || salesPlanCards.length > 0
+        ? window.confirm("現在の保存データをサンプルデータで上書きします。よろしいですか。")
+        : true;
+    if (!ok) return;
+    const sample = createSampleData();
+    setPlan(sample.plan);
+    setHarvestCards(sample.harvestCards);
+    setProductCards(sample.productCards);
+    setSalesPlanCards(sample.salesPlanCards);
+    setSettings({ activeTab: "result", hasSeenIntro: true });
+  };
 
   const exportJson = () => {
-    const data = buildExportData(plan, units, harvests, products, trials);
+    const data = buildExportData({
+      schemaVersion: 5,
+      plan,
+      harvestCards,
+      productCards,
+      salesPlanCards,
+      settings
+    });
     const blob = new Blob([JSON.stringify(data, null, 2)], {
       type: "application/json"
     });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `tenokori-sales-plan-v110-${new Date()
-      .toISOString()
-      .slice(0, 10)}.json`;
+    link.download = `tenokori-sales-plan-v120-${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -259,39 +300,26 @@ export default function Home() {
     if (!file) return;
     try {
       const parsed = JSON.parse(await file.text()) as unknown;
-      const error = getImportValidationError(parsed);
-      if (error) {
-        setImportMessage(error);
+      const validation = getImportValidationError(parsed);
+      if (validation) {
+        setImportMessage(validation);
+        return;
+      }
+      const data = readExportData(parsed);
+      if (!data) {
+        setImportMessage("このデータは読み込めません。保存形式が違うか、内容が壊れている可能性があります。");
         return;
       }
       const ok = window.confirm("現在の保存データを、読み込んだJSONで上書きします。よろしいですか。");
       if (!ok) return;
-      const data = parsed as ExportData;
       setPlan(data.plan);
-      setUnits(ensureKgUnit(data.units));
-      setHarvests(data.harvests);
-      setProducts(data.products);
-      setTrials(data.trials);
+      setHarvestCards(data.harvestCards);
+      setProductCards(data.productCards);
+      setSalesPlanCards(data.salesPlanCards);
       setImportMessage("JSONを読み込みました。");
     } catch {
       setImportMessage("このデータは読み込めません。保存形式が違うか、内容が壊れている可能性があります。");
     }
-  };
-
-  const loadSample = () => {
-    const hasData =
-      plan.cropName || harvests.length > 0 || products.length > 0 || trials.length > 0;
-    const ok = hasData
-      ? window.confirm("現在の保存データをサンプルデータで上書きします。よろしいですか。")
-      : true;
-    if (!ok) return;
-    const sample = createSampleData();
-    setPlan(sample.plan);
-    setUnits(sample.units);
-    setHarvests(sample.harvests);
-    setProducts(sample.products);
-    setTrials(sample.trials);
-    setSettings({ activeTab: "result", hasSeenIntro: true });
   };
 
   return (
@@ -299,16 +327,10 @@ export default function Home() {
       <header className="mb-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-sm font-bold text-leaf">
-              入力は現場単位。比較はkg換算。判断は手元に残るお金。
-            </p>
-            <h1 className="mt-1 text-3xl font-black tracking-normal text-stone-950">
-              手残り販売計画
-            </h1>
+            <p className="text-sm font-bold text-leaf">複数カードを合算して、目標に届くかを見る。</p>
+            <h1 className="mt-1 text-3xl font-black tracking-normal text-stone-950">手残り販売計画</h1>
           </div>
-          <button className={`${secondaryButton} no-print`} onClick={loadSample}>
-            サンプル投入
-          </button>
+          <button className={`${secondaryButton} no-print`} onClick={loadSample}>サンプル投入</button>
         </div>
       </header>
 
@@ -317,11 +339,7 @@ export default function Home() {
           {TABS.map((tab) => (
             <button
               key={tab.id}
-              className={`shrink-0 rounded-md px-4 py-2 text-sm font-black ${
-                activeTab === tab.id
-                  ? "bg-leaf text-white"
-                  : "bg-white text-stone-700 ring-1 ring-stone-200"
-              }`}
+              className={`shrink-0 rounded-md px-4 py-2 text-sm font-black ${activeTab === tab.id ? "bg-leaf text-white" : "bg-white text-stone-700 ring-1 ring-stone-200"}`}
               onClick={() => setActiveTab(tab.id)}
             >
               {tab.label}
@@ -331,55 +349,47 @@ export default function Home() {
       </nav>
 
       <div className="space-y-3">
-        {loadErrors.map((error) => (
-          <Warning key={error}>{error}</Warning>
-        ))}
-        {saveError ? <Warning>{saveError}</Warning> : null}
-        {summary.hasOverDecided ? <Notice>取れた量を超えています。売る量を少し下げるか、取れそうな量を見直してください。</Notice> : null}
-        {!summary.isTargetEnough && plan.targetCashYen > 0 ? (
-          <Notice>今の条件では目標まであと{yen(summary.shortageYen)}足りません。</Notice>
-        ) : null}
-        {summary.hasNegativeProduct ? (
-          <Notice>費用が売値を上回っている売り方があります。売るほど手元に残るお金が減る可能性があります。</Notice>
-        ) : null}
+        {messages.map((message) => <Notice key={message}>{message}</Notice>)}
+        {saveMessage ? <Notice>{saveMessage}</Notice> : null}
       </div>
 
       <section className="mt-4">
-        {activeTab === "intro" ? (
-          <IntroTab
-            start={() => {
-              setSettings({ activeTab: "goal", hasSeenIntro: true });
-            }}
-          />
-        ) : null}
+        {activeTab === "intro" ? <IntroTab start={() => setActiveTab("goal")} /> : null}
         {activeTab === "goal" ? <GoalTab plan={plan} updatePlan={updatePlan} /> : null}
         {activeTab === "harvests" ? (
-          <HarvestTab
-            planId={plan.id}
-            units={units}
-            setUnits={setUnits}
-            harvests={harvests}
-            setHarvests={setHarvests}
-            summary={summary}
+          <HarvestCardsTab
+            cards={harvestCards}
+            setCards={setHarvestCards}
+            openCards={openCards}
+            toggleCard={toggleCard}
+            closeCard={closeCard}
+            setActiveTab={setActiveTab}
+            salesPlanCards={salesPlanCards}
+            setSalesPlanCards={setSalesPlanCards}
           />
         ) : null}
         {activeTab === "products" ? (
-          <ProductsTab
-            planId={plan.id}
-            units={units}
-            products={products}
-            setProducts={setProducts}
+          <ProductCardsTab
+            cards={productCards}
+            setCards={setProductCards}
+            openCards={openCards}
+            toggleCard={toggleCard}
+            closeCard={closeCard}
+            setActiveTab={setActiveTab}
+            salesPlanCards={salesPlanCards}
+            setSalesPlanCards={setSalesPlanCards}
           />
         ) : null}
         {activeTab === "trials" ? (
-          <TrialsTab
-            planId={plan.id}
-            units={units}
-            products={products}
-            setProducts={setProducts}
-            trials={trials}
-            setTrials={setTrials}
-            summary={summary}
+          <SalesPlanCardsTab
+            cards={salesPlanCards}
+            setCards={setSalesPlanCards}
+            harvestCards={harvestCards}
+            productCards={productCards}
+            openCards={openCards}
+            toggleCard={toggleCard}
+            closeCard={closeCard}
+            setActiveTab={setActiveTab}
           />
         ) : null}
         {activeTab === "result" ? (
@@ -387,6 +397,10 @@ export default function Home() {
             plan={plan}
             summary={summary}
             textOutput={textOutput}
+            detailsOpen={detailsOpen}
+            setDetailsOpen={setDetailsOpen}
+            dataOpen={dataOpen}
+            setDataOpen={setDataOpen}
             exportJson={exportJson}
             importJson={importJson}
             importMessage={importMessage}
@@ -401,17 +415,11 @@ function IntroTab({ start }: { start: () => void }) {
   return (
     <div className={panelClass}>
       <h2 className="text-2xl font-black">はじめに</h2>
-      <p className="mt-4 whitespace-pre-line text-lg font-semibold leading-8 text-stone-800">
-        {`今年、いくら手元に残したいかを決めて、
-取れた作物をどんな形で売れば近づけるかを試すアプリです。
-
-会計ソフトではありません。
-まずは、売り方を考えるための道具です。`}
+      <p className="mt-4 text-lg font-semibold leading-8 text-stone-800">
+        今年いくら手元に残したいかを決めて、取れた量・売る形・売り方を組み合わせて試すアプリです。
       </p>
       <div className="mt-6">
-        <button className={primaryButton} onClick={start}>
-          はじめる
-        </button>
+        <button className={primaryButton} onClick={start}>はじめる</button>
       </div>
     </div>
   );
@@ -427,418 +435,259 @@ function GoalTab({
   return (
     <div className={panelClass}>
       <h2 className="text-xl font-black">目標</h2>
-      <p className="mt-2 text-sm font-semibold leading-6 text-stone-600">
-        生活費、来年の準備、資材代などを考えて、今年いくら手元に残したいかを決めます。
-      </p>
+      <p className="mt-2 text-sm font-semibold leading-6 text-stone-600">今年手元に残したい金額を入力します。</p>
       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-        <TextInput
-          label="作物名"
-          value={plan.cropName}
-          onChange={(cropName) => updatePlan({ cropName })}
-          placeholder="例：ぶどう"
-        />
-        <TextInput
-          label="品種名"
-          value={plan.varietyName ?? ""}
-          onChange={(varietyName) => updatePlan({ varietyName })}
-          placeholder="例：シャインマスカット"
-        />
-        <NumberInput
-          label="今年残したいお金"
-          unit="円"
-          value={plan.targetCashYen}
-          placeholder="例：1200000"
-          onChange={(targetCashYen) => updatePlan({ targetCashYen })}
-        />
-        <NumberInput
-          label="来年の目標"
-          unit="円"
-          value={plan.nextYearTargetCashYen ?? 0}
-          placeholder="例：3000000"
-          onChange={(nextYearTargetCashYen) => updatePlan({ nextYearTargetCashYen })}
-        />
+        <TextInput label="作物名" value={plan.cropName} onChange={(cropName) => updatePlan({ cropName })} placeholder="例：ぶどう" />
+        <TextInput label="品種名" value={plan.varietyName ?? ""} onChange={(varietyName) => updatePlan({ varietyName })} placeholder="例：シャインマスカット" />
+        <NumberInput label="目標手残り" unit="円" value={plan.targetCashYen} onChange={(targetCashYen) => updatePlan({ targetCashYen })} placeholder="例：1200000" />
+        <NumberInput label="来年の目標" unit="円" value={plan.nextYearTargetCashYen ?? 0} onChange={(nextYearTargetCashYen) => updatePlan({ nextYearTargetCashYen })} placeholder="例：3000000" />
       </div>
       <label className="mt-4 block">
         <span className={labelClass}>メモ</span>
-        <textarea
-          className={`${inputClass} min-h-24`}
-          value={plan.memo ?? ""}
-          placeholder="例：今年は固定客を増やしたい"
-          onChange={(event) => updatePlan({ memo: event.target.value })}
-        />
+        <textarea className={`${inputClass} min-h-24`} value={plan.memo ?? ""} placeholder="例：今年は固定客を増やしたい" onChange={(event) => updatePlan({ memo: event.target.value })} />
       </label>
+      <p className="mt-4 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">
+        目標：{plan.targetCashYen > 0 ? yen(plan.targetCashYen) : "未入力"}
+      </p>
     </div>
   );
 }
 
-function HarvestTab({
-  planId,
-  units,
-  setUnits,
-  harvests,
-  setHarvests,
-  summary
+function HarvestCardsTab({
+  cards,
+  setCards,
+  openCards,
+  toggleCard,
+  closeCard,
+  setActiveTab,
+  salesPlanCards,
+  setSalesPlanCards
 }: {
-  planId: string;
-  units: Unit[];
-  setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
-  harvests: Harvest[];
-  setHarvests: React.Dispatch<React.SetStateAction<Harvest[]>>;
-  summary: ReturnType<typeof calculateSummary>;
+  cards: HarvestCard[];
+  setCards: React.Dispatch<React.SetStateAction<HarvestCard[]>>;
+  openCards: Record<string, boolean>;
+  toggleCard: (id: string) => void;
+  closeCard: (id: string) => void;
+  setActiveTab: (tab: TabId) => void;
+  salesPlanCards: SalesPlanCard[];
+  setSalesPlanCards: React.Dispatch<React.SetStateAction<SalesPlanCard[]>>;
 }) {
-  const unitMap = new Map(units.map((unit) => [unit.id, unit]));
-  const updateUnit = (id: string, patch: Partial<Unit>) =>
-    setUnits((current) =>
-      current.map((unit) =>
-        unit.id === id ? { ...unit, ...patch, updatedAt: nowIso() } : unit
-      )
-    );
-  const updateHarvest = (id: string, patch: Partial<Harvest>) =>
-    setHarvests((current) =>
-      current.map((harvest) =>
-        harvest.id === id ? { ...harvest, ...patch, updatedAt: nowIso() } : harvest
-      )
-    );
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Metric label="取れた量" value={kg(summary.harvestTotalKg)} strong />
-        <Metric label="売る形が決まった量" value={kg(summary.decidedKg)} />
-        <Metric label="まだ売り方が決まっていない量" value={kg(summary.undecidedKg)} strong />
-      </div>
-
-      <div className={panelClass}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-xl font-black">数え方</h2>
-          <button className={primaryButton} onClick={() => setUnits((current) => [...current, createUnit()])}>
-            数え方を追加
-          </button>
-        </div>
-        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-          {units.map((unit) => (
-            <article key={unit.id} className="rounded-md border border-stone-200 bg-stone-50 p-3">
-              <div className="flex items-start justify-between gap-3">
-                <h3 className="font-black">{unit.name || "名前未入力"}</h3>
-                {unit.id !== "unit-kg" ? (
-                  <button className={dangerButton} onClick={() => setUnits((current) => current.filter((row) => row.id !== unit.id))}>
-                    削除
-                  </button>
-                ) : null}
-              </div>
-              <div className="mt-3 grid grid-cols-1 gap-3">
-                <TextInput label="名前" value={unit.name} onChange={(name) => updateUnit(unit.id, { name })} placeholder="例：箱、房、kg" />
-                <TextInput label="表示" value={unit.label} onChange={(label) => updateUnit(unit.id, { label })} placeholder="例：1箱、1房" />
-                <NumberInput
-                  label="1つあたりの重さ"
-                  unit="kg"
-                  value={unit.weightKg}
-                  disabled={unit.id === "unit-kg"}
-                  placeholder="例：5"
-                  onChange={(weightKg) => updateUnit(unit.id, { weightKg })}
-                />
-              </div>
-              {unit.weightKg <= 0 ? <div className="mt-3"><Notice>1つあたりの重さを入れると、kgで比べられます。</Notice></div> : null}
-            </article>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-xl font-black">取れた量</h2>
-        <button className={primaryButton} onClick={() => setHarvests((current) => [...current, createHarvest(planId, units[0]?.id ?? "unit-kg")])}>
-          取れた量を追加
-        </button>
-      </div>
-      {harvests.map((harvest) => {
-        const unit = unitMap.get(harvest.unitId);
-        const result = calculateHarvest(harvest, unit);
-        return (
-          <article key={harvest.id} className={panelClass}>
-            <div className="flex items-start justify-between gap-3">
-              <h3 className="text-lg font-black">{harvest.name || "名前未入力"}</h3>
-              <button className={dangerButton} onClick={() => setHarvests((current) => current.filter((row) => row.id !== harvest.id))}>
-                削除
-              </button>
-            </div>
-            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-              <TextInput label="名前" value={harvest.name} onChange={(name) => updateHarvest(harvest.id, { name })} placeholder="例：第1収穫分" />
-              <label>
-                <span className={labelClass}>数え方</span>
-                <select className={inputClass} value={harvest.unitId} onChange={(event) => updateHarvest(harvest.id, { unitId: event.target.value })}>
-                  {units.map((row) => (
-                    <option key={row.id} value={row.id}>{row.name || row.label || "名前未入力"}</option>
-                  ))}
-                </select>
-              </label>
-              <NumberInput label="数量" unit={unit?.name || "個"} value={harvest.quantity} placeholder="例：5" onChange={(quantity) => updateHarvest(harvest.id, { quantity })} />
-            </div>
-            <label className="mt-4 block">
-              <span className={labelClass}>メモ</span>
-              <textarea className={`${inputClass} min-h-20`} value={harvest.memo ?? ""} placeholder="例：午前に取った分" onChange={(event) => updateHarvest(harvest.id, { memo: event.target.value })} />
-            </label>
-            <div className="mt-4">
-              <Metric label="kgで見ると" value={`${round(harvest.quantity).toLocaleString("ja-JP")}${unit?.name || ""} = 約${kg(result.convertedKg)}`} strong />
-            </div>
-            {result.missingUnitWeight ? <div className="mt-3"><Notice>1つあたりの重さを入れると、kgで比べられます。</Notice></div> : null}
-          </article>
-        );
-      })}
-    </div>
-  );
-}
-
-function ProductsTab({
-  planId,
-  units,
-  products,
-  setProducts
-}: {
-  planId: string;
-  units: Unit[];
-  products: Product[];
-  setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
-}) {
-  const unitMap = new Map(units.map((unit) => [unit.id, unit]));
-  const updateProduct = (id: string, patch: Partial<Product>) =>
-    setProducts((current) =>
-      current.map((product) =>
-        product.id === id ? { ...product, ...patch, updatedAt: nowIso() } : product
-      )
-    );
+  const updateCard = (id: string, patch: Partial<HarvestCard>) =>
+    setCards((current) => current.map((card) => card.id === id ? { ...card, ...patch, updatedAt: nowIso() } : card));
+  const deleteCard = (id: string) => {
+    const used = salesPlanCards.some((card) => card.harvestId === id);
+    const ok = used
+      ? window.confirm("この取れた量を使っている販売計画があります。削除すると、その販売計画は「取れた量未選択」になります。削除しますか？")
+      : window.confirm("この取れた量カードを削除しますか？");
+    if (!ok) return;
+    setCards((current) => current.filter((card) => card.id !== id));
+    setSalesPlanCards((current) => current.map((card) => card.harvestId === id ? { ...card, harvestId: undefined, updatedAt: nowIso() } : card));
+  };
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-xl font-black">売る形</h2>
-        <button className={primaryButton} onClick={() => setProducts((current) => [...current, createProduct(planId, units[0]?.id ?? "unit-kg")])}>
-          売る形を追加
-        </button>
+        <div>
+          <h2 className="text-xl font-black">取れた量カード一覧</h2>
+          <p className="mt-1 text-sm font-semibold text-stone-600">販売できる量を複数登録します。</p>
+        </div>
+        <button className={primaryButton} onClick={() => setCards((current) => [...current, createHarvestCard(current.length + 1)])}>取れた量を追加</button>
       </div>
-      {products.map((product) => {
-        const unit = unitMap.get(product.contentUnitId);
-        const result = calculateProduct(product, unit);
-        return (
-          <article key={product.id} className={panelClass}>
-            <div className="flex items-start justify-between gap-3">
-              <h3 className="text-lg font-black">{product.name || "名前未入力"}</h3>
-              <button className={dangerButton} onClick={() => setProducts((current) => current.filter((row) => row.id !== product.id))}>
-                削除
-              </button>
-            </div>
-            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-              <TextInput label="売る形の名前" value={product.name} onChange={(name) => updateProduct(product.id, { name })} placeholder="例：2kg箱" />
-              <label>
-                <span className={labelClass}>売り方の作戦</span>
-                <select className={inputClass} value={product.category} onChange={(event) => updateProduct(product.id, { category: event.target.value as ProductCategory })}>
-                  {Object.entries(PRODUCT_CATEGORY_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span className={labelClass}>中身の数え方</span>
-                <select className={inputClass} value={product.contentUnitId} onChange={(event) => updateProduct(product.id, { contentUnitId: event.target.value })}>
-                  {units.map((row) => (
-                    <option key={row.id} value={row.id}>{row.name || row.label || "名前未入力"}</option>
-                  ))}
-                </select>
-              </label>
-              <NumberInput label="中身" unit={unit?.name || "個"} value={product.contentQuantity} placeholder="例：2" onChange={(contentQuantity) => updateProduct(product.id, { contentQuantity })} />
-              <TextInput label="売る単位" value={product.salesUnitLabel} onChange={(salesUnitLabel) => updateProduct(product.id, { salesUnitLabel })} placeholder="例：箱、袋" />
-              <NumberInput label="売値" unit="円" value={product.priceYen} placeholder="例：4200" onChange={(priceYen) => updateProduct(product.id, { priceYen })} />
-              <NumberInput label="箱代・袋代" unit="円" value={product.packageCostYen} placeholder="例：250" onChange={(packageCostYen) => updateProduct(product.id, { packageCostYen })} />
-              <NumberInput label="送料" unit="円" value={product.shippingCostYen} placeholder="例：900" onChange={(shippingCostYen) => updateProduct(product.id, { shippingCostYen })} />
-              <NumberInput label="手数料" unit="円" value={product.feeYen} placeholder="例：150" onChange={(feeYen) => updateProduct(product.id, { feeYen })} />
-              <NumberInput label="その他費用" unit="円" value={product.otherCostYen} placeholder="例：0" onChange={(otherCostYen) => updateProduct(product.id, { otherCostYen })} />
-            </div>
-            <label className="mt-4 block">
-              <span className={labelClass}>メモ</span>
-              <textarea className={`${inputClass} min-h-20`} value={product.memo ?? ""} placeholder="例：贈答向け" onChange={(event) => updateProduct(product.id, { memo: event.target.value })} />
-            </label>
-            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <Metric label="1つに入る量" value={kg(result.contentKg)} strong />
-              <Metric label={`1${product.salesUnitLabel || "つ"}売ると`} value={`約${yen(result.moneyLeftYen)}残ります`} strong />
-              <Metric label="1kgあたりでは" value={`約${perKg(result.kgMoneyLeftYen)}残ります`} strong />
-            </div>
-            <div className="mt-3 space-y-2">
-              {result.warnings.missingContent ? <Notice>1つあたりの重さを入れると、kgで比べられます。</Notice> : null}
-              {result.warnings.missingPrice ? <Notice>売値を入れると、目標との差が分かります。</Notice> : null}
-              {result.warnings.negativeMoneyLeft ? <Notice>この売り方は、費用が売値を上回っています。</Notice> : null}
-            </div>
-          </article>
-        );
-      })}
-    </div>
-  );
-}
-
-function TrialsTab({
-  planId,
-  units,
-  products,
-  setProducts,
-  trials,
-  setTrials,
-  summary
-}: {
-  planId: string;
-  units: Unit[];
-  products: Product[];
-  setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
-  trials: Trial[];
-  setTrials: React.Dispatch<React.SetStateAction<Trial[]>>;
-  summary: ReturnType<typeof calculateSummary>;
-}) {
-  const productMap = new Map(products.map((product) => [product.id, product]));
-  const unitMap = new Map(units.map((unit) => [unit.id, unit]));
-  const updateTrial = (id: string, patch: Partial<Trial>) =>
-    setTrials((current) =>
-      current.map((trial) =>
-        trial.id === id ? { ...trial, ...patch, updatedAt: nowIso() } : trial
-      )
-    );
-  const updateProduct = (id: string, patch: Partial<Product>) =>
-    setProducts((current) =>
-      current.map((product) =>
-        product.id === id ? { ...product, ...patch, updatedAt: nowIso() } : product
-      )
-    );
-
-  return (
-    <div className="space-y-4">
-      <div className="sticky top-[57px] z-10 -mx-4 grid grid-cols-2 gap-2 border-y border-stone-200 bg-paper/95 p-4 backdrop-blur sm:top-[65px] sm:mx-0 sm:rounded-lg sm:border lg:grid-cols-4">
-        <Metric label="見込み手残り" value={yen(summary.totalMoneyLeftYen)} strong />
-        <Metric label="目標との差" value={yen(summary.targetGapYen)} strong />
-        <Metric label="達成率" value={percent(summary.achievementRate)} />
-        <Metric
-          label="必要単価の目安"
-          value={
-            summary.requiredPricePerKg === null
-              ? "未設定"
-              : perKg(summary.requiredPricePerKg)
+      {cards.length === 0 ? <Notice>取れた量：未入力。売れそうな量を入れてください。</Notice> : null}
+      {cards.map((card, index) => (
+        <CardShell
+          key={card.id}
+          title={`${card.name || `取れた量${index + 1}`}：${card.amount > 0 ? `${round(card.amount)}kg` : "未入力"}`}
+          summary={card.memo || "販売できる量・在庫・収穫見込みのまとまりです。"}
+          isOpen={openCards[card.id] ?? true}
+          onToggle={() => toggleCard(card.id)}
+          actions={
+            <>
+              <button className={primaryButton} onClick={() => closeCard(card.id)}>保存する</button>
+              <button className={secondaryButton} onClick={() => setCards((current) => [...current, duplicateHarvestCard(card, current.length + 1)])}>複製</button>
+              <button className={dangerButton} onClick={() => deleteCard(card.id)}>削除</button>
+            </>
           }
-        />
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-xl font-black">売り方を試す</h2>
-        <button className={primaryButton} disabled={products.length === 0} onClick={() => setTrials((current) => [...current, createTrial(planId, products[0]?.id ?? "")])}>
-          試す行を追加
-        </button>
-      </div>
-      {products.length === 0 ? <Notice>1袋・1箱・1kgなど、売る単位を決めると値段を試せます。</Notice> : null}
-      {trials.map((trial) => {
-        const product = productMap.get(trial.productId);
-        const unit = product ? unitMap.get(product.contentUnitId) : undefined;
-        const productResult = product ? calculateProduct(product, unit) : undefined;
-        const result = calculateTrial(trial, product, unit);
-        return (
-          <article key={trial.id} className={panelClass}>
-            <div className="flex items-start justify-between gap-3">
-              <h3 className="text-lg font-black">{product?.name || "売る形未選択"}</h3>
-              <button className={dangerButton} onClick={() => setTrials((current) => current.filter((row) => row.id !== trial.id))}>
-                削除
-              </button>
-            </div>
-            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-              <label>
-                <span className={labelClass}>売る形</span>
-                <select className={inputClass} value={trial.productId} onChange={(event) => updateTrial(trial.id, { productId: event.target.value })}>
-                  <option value="">選択してください</option>
-                  {products.map((row) => (
-                    <option key={row.id} value={row.id}>{row.name || "名前未入力"}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span className={labelClass}>入力方法</span>
-                <select className={inputClass} value={trial.inputMode} onChange={(event) => updateTrial(trial.id, { inputMode: event.target.value as Trial["inputMode"] })}>
-                  <option value="count">作る数で入力</option>
-                  <option value="weight">使う量kgで入力</option>
-                </select>
-              </label>
-              {trial.inputMode === "count" ? (
-                <div className="space-y-2">
-                  <NumberInput label="作る数" unit={product?.salesUnitLabel || "個"} value={trial.count ?? 0} placeholder="例：10" onChange={(count) => updateTrial(trial.id, { count })} />
-                  <input className="w-full accent-leaf" type="range" min="0" max="200" value={trial.count ?? 0} onChange={(event) => updateTrial(trial.id, { count: Number(event.target.value) })} />
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <NumberInput label="使う量" unit="kg" value={trial.inputWeightKg ?? 0} placeholder="例：25" onChange={(inputWeightKg) => updateTrial(trial.id, { inputWeightKg })} />
-                  <input className="w-full accent-leaf" type="range" min="0" max="300" step="0.5" value={trial.inputWeightKg ?? 0} onChange={(event) => updateTrial(trial.id, { inputWeightKg: Number(event.target.value) })} />
-                </div>
-              )}
-              {product ? (
-                <ProductPriceEditor
-                  product={product}
-                  updateProduct={(patch) => updateProduct(product.id, patch)}
-                />
-              ) : null}
-            </div>
-            <label className="mt-4 block">
-              <span className={labelClass}>メモ</span>
-              <textarea className={`${inputClass} min-h-20`} value={trial.memo ?? ""} placeholder="例：まずこの数で試す" onChange={(event) => updateTrial(trial.id, { memo: event.target.value })} />
-            </label>
-            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-4">
-              <Metric label="作れる数" value={`${result.count.toLocaleString("ja-JP")}${product?.salesUnitLabel || "個"}`} strong />
-              <Metric label="使う量kg" value={kg(result.usedKg)} strong />
-              <Metric label="見込み手残り" value={yen(result.moneyLeftTotalYen)} strong />
-              <Metric label="目標との差" value={yen(summary.targetGapYen)} strong />
-            </div>
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <Metric label="達成率" value={percent(summary.achievementRate)} />
-              <Metric
-                label="必要単価"
-                value={
-                  summary.requiredPricePerKg === null
-                    ? "未設定"
-                    : perKg(summary.requiredPricePerKg)
-                }
-              />
-              <Metric label="余り" value={kg(result.remainderKg)} />
-            </div>
-            <p className="mt-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">
-              {trial.inputMode === "weight"
-                ? `${kg(result.inputWeightKg)}を${product?.name || "選んだ形"}に回すと、${result.count.toLocaleString("ja-JP")}${product?.salesUnitLabel || "個"}作れて、${kg(result.remainderKg)}余ります。`
-                : `${product?.name || "選んだ形"}を${result.count.toLocaleString("ja-JP")}${product?.salesUnitLabel || "個"}作ると、${kg(result.usedKg)}使います。`}
-            </p>
-            <div className="mt-3 space-y-2">
-              {productResult?.warnings.missingContent ? <Notice>1つあたりの重さを入れると、使う量をkgで比べられます。</Notice> : null}
-              {productResult?.warnings.missingPrice ? <Notice>売値を入れると、目標との差が分かります。</Notice> : null}
-              {result.hasRemainder ? <Notice>{kg(result.remainderKg)}余ります</Notice> : null}
-            </div>
-          </article>
-        );
-      })}
+        >
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <TextInput label="名前" value={card.name} onChange={(name) => updateCard(card.id, { name })} placeholder="例：通常品" />
+            <NumberInput label="量" unit="kg" value={card.amount} onChange={(amount) => updateCard(card.id, { amount })} placeholder="例：120" />
+          </div>
+          <label className="block">
+            <span className={labelClass}>メモ</span>
+            <textarea className={`${inputClass} min-h-20`} value={card.memo ?? ""} onChange={(event) => updateCard(card.id, { memo: event.target.value })} placeholder="例：直売向けに使う" />
+          </label>
+        </CardShell>
+      ))}
+      <button className={secondaryButton} onClick={() => setActiveTab("products")}>売る形へ進む</button>
     </div>
   );
 }
 
-function ProductPriceEditor({
-  product,
-  updateProduct
+function ProductCardsTab({
+  cards,
+  setCards,
+  openCards,
+  toggleCard,
+  closeCard,
+  setActiveTab,
+  salesPlanCards,
+  setSalesPlanCards
 }: {
-  product: Product;
-  updateProduct: (patch: Partial<Product>) => void;
+  cards: ProductCard[];
+  setCards: React.Dispatch<React.SetStateAction<ProductCard[]>>;
+  openCards: Record<string, boolean>;
+  toggleCard: (id: string) => void;
+  closeCard: (id: string) => void;
+  setActiveTab: (tab: TabId) => void;
+  salesPlanCards: SalesPlanCard[];
+  setSalesPlanCards: React.Dispatch<React.SetStateAction<SalesPlanCard[]>>;
 }) {
+  const updateCard = (id: string, patch: Partial<ProductCard>) =>
+    setCards((current) => current.map((card) => card.id === id ? { ...card, ...patch, updatedAt: nowIso() } : card));
+  const deleteCard = (id: string) => {
+    const used = salesPlanCards.some((card) => card.productId === id);
+    const ok = used
+      ? window.confirm("この売る形を使っている販売計画があります。削除すると、その販売計画は「売る形未選択」になります。削除しますか？")
+      : window.confirm("この売る形カードを削除しますか？");
+    if (!ok) return;
+    setCards((current) => current.filter((card) => card.id !== id));
+    setSalesPlanCards((current) => current.map((card) => card.productId === id ? { ...card, productId: undefined, updatedAt: nowIso() } : card));
+  };
+
   return (
-    <div className="space-y-2">
-      <NumberInput
-        label="売値"
-        unit="円"
-        value={product.priceYen}
-        placeholder="例：4200"
-        onChange={(priceYen) => updateProduct({ priceYen })}
-      />
-      <input
-        className="w-full accent-leaf"
-        type="range"
-        min="0"
-        max="10000"
-        step="100"
-        value={product.priceYen}
-        onChange={(event) => updateProduct({ priceYen: Number(event.target.value) })}
-      />
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-black">売る形カード一覧</h2>
+          <p className="mt-1 text-sm font-semibold text-stone-600">1袋・1箱・1kgなど、販売単位を登録します。</p>
+        </div>
+        <button className={primaryButton} onClick={() => setCards((current) => [...current, createProductCard(current.length + 1)])}>売る形を追加</button>
+      </div>
+      {cards.length === 0 ? <Notice>売る形：未入力。1袋・1箱・1kgなどの売る単位を決めてください。</Notice> : null}
+      {cards.map((card, index) => (
+        <CardShell
+          key={card.id}
+          title={`${card.name || `売る形${index + 1}`}：${card.quantityPerUnit > 0 ? `1${card.unitName || "個"} ${formatProductAmount(card)}` : "未入力"}`}
+          summary={card.memo || "売る形カードは価格を持たず、値段は販売計画で決めます。"}
+          isOpen={openCards[card.id] ?? true}
+          onToggle={() => toggleCard(card.id)}
+          actions={
+            <>
+              <button className={primaryButton} onClick={() => closeCard(card.id)}>保存する</button>
+              <button className={secondaryButton} onClick={() => setCards((current) => [...current, duplicateProductCard(card, current.length + 1)])}>複製</button>
+              <button className={dangerButton} onClick={() => deleteCard(card.id)}>削除</button>
+            </>
+          }
+        >
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <TextInput label="名前" value={card.name} onChange={(name) => updateCard(card.id, { name })} placeholder="例：直売所用" />
+            <TextInput label="売る単位名" value={card.unitName} onChange={(unitName) => updateCard(card.id, { unitName })} placeholder="例：袋、箱、kg" />
+            <NumberInput label="1単位あたりの量" unit={card.quantityUnit} value={card.quantityPerUnit} onChange={(quantityPerUnit) => updateCard(card.id, { quantityPerUnit })} placeholder="例：300" />
+            <label>
+              <span className={labelClass}>量の単位</span>
+              <select className={inputClass} value={card.quantityUnit} onChange={(event) => updateCard(card.id, { quantityUnit: event.target.value as ProductCard["quantityUnit"] })}>
+                <option value="g">g</option>
+                <option value="kg">kg</option>
+              </select>
+            </label>
+          </div>
+          <label className="block">
+            <span className={labelClass}>メモ</span>
+            <textarea className={`${inputClass} min-h-20`} value={card.memo ?? ""} onChange={(event) => updateCard(card.id, { memo: event.target.value })} placeholder="例：直売所に置く袋" />
+          </label>
+        </CardShell>
+      ))}
+      <button className={secondaryButton} onClick={() => setActiveTab("trials")}>試すへ進む</button>
+    </div>
+  );
+}
+
+function SalesPlanCardsTab({
+  cards,
+  setCards,
+  harvestCards,
+  productCards,
+  openCards,
+  toggleCard,
+  closeCard,
+  setActiveTab
+}: {
+  cards: SalesPlanCard[];
+  setCards: React.Dispatch<React.SetStateAction<SalesPlanCard[]>>;
+  harvestCards: HarvestCard[];
+  productCards: ProductCard[];
+  openCards: Record<string, boolean>;
+  toggleCard: (id: string) => void;
+  closeCard: (id: string) => void;
+  setActiveTab: (tab: TabId) => void;
+}) {
+  const updateCard = (id: string, patch: Partial<SalesPlanCard>) =>
+    setCards((current) => current.map((card) => card.id === id ? { ...card, ...patch, updatedAt: nowIso() } : card));
+  const harvestMap = new Map(harvestCards.map((card) => [card.id, card]));
+  const productMap = new Map(productCards.map((card) => [card.id, card]));
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-black">販売計画カード一覧</h2>
+          <p className="mt-1 text-sm font-semibold text-stone-600">どの取れた量を、どの売る形で、何個・いくらで売るかを試します。</p>
+        </div>
+        <button className={primaryButton} onClick={() => setCards((current) => [...current, createSalesPlanCard(current.length + 1)])}>販売計画を追加</button>
+      </div>
+      {cards.length === 0 ? <Notice>販売計画：未入力。売り方をカードで追加してください。</Notice> : null}
+      {cards.map((card, index) => {
+        const product = productMap.get(card.productId ?? "");
+        const harvest = harvestMap.get(card.harvestId ?? "");
+        const result = calculateSalesPlan(card, harvest, product);
+        const missing = result.missing.length > 0;
+        return (
+          <CardShell
+            key={card.id}
+            title={`${card.name || `販売計画${index + 1}`}：${missing ? "売る形・売値・販売数が未入力" : `${product?.name || "売る形"} ${yen(card.pricePerUnit)} × ${card.plannedUnits}${product?.unitName || "個"}`}`}
+            summary={missing ? result.missing.join(" / ") : `使用量 ${kg(result.usedKg)}、見込み ${yen(result.takeHomeYen)}`}
+            isOpen={openCards[card.id] ?? true}
+            onToggle={() => toggleCard(card.id)}
+            actions={
+              <>
+                <button className={primaryButton} onClick={() => closeCard(card.id)}>保存する</button>
+                <button className={secondaryButton} onClick={() => setCards((current) => [...current, duplicateSalesPlanCard(card, current.length + 1)])}>複製</button>
+                <button className={dangerButton} onClick={() => window.confirm("この販売計画カードを削除しますか？") && setCards((current) => current.filter((row) => row.id !== card.id))}>削除</button>
+              </>
+            }
+          >
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <TextInput label="名前" value={card.name} onChange={(name) => updateCard(card.id, { name })} placeholder="例：直売所で袋売り" />
+              <label>
+                <span className={labelClass}>取れた量カード</span>
+                <select className={inputClass} value={card.harvestId ?? ""} onChange={(event) => updateCard(card.id, { harvestId: event.target.value || undefined })}>
+                  <option value="">取れた量未選択</option>
+                  {harvestCards.map((row) => <option key={row.id} value={row.id}>{row.name || "名前未入力"}</option>)}
+                </select>
+              </label>
+              <label>
+                <span className={labelClass}>売る形カード</span>
+                <select className={inputClass} value={card.productId ?? ""} onChange={(event) => updateCard(card.id, { productId: event.target.value || undefined })}>
+                  <option value="">売る形未選択</option>
+                  {productCards.map((row) => <option key={row.id} value={row.id}>{row.name || "名前未入力"}</option>)}
+                </select>
+              </label>
+              <NumberInput label="売値" unit="円" value={card.pricePerUnit} onChange={(pricePerUnit) => updateCard(card.id, { pricePerUnit })} placeholder="例：500" />
+              <NumberInput label="販売予定数" unit={product?.unitName || "個"} value={card.plannedUnits} onChange={(plannedUnits) => updateCard(card.id, { plannedUnits })} placeholder="例：200" />
+            </div>
+            <label className="block">
+              <span className={labelClass}>メモ</span>
+              <textarea className={`${inputClass} min-h-20`} value={card.memo ?? ""} onChange={(event) => updateCard(card.id, { memo: event.target.value })} placeholder="例：週末の直売所分" />
+            </label>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Metric label="使用量" value={kg(result.usedKg)} />
+              <Metric label="売上" value={yen(result.salesYen)} />
+              <Metric label="手残り見込み" value={yen(result.takeHomeYen)} strong />
+            </div>
+          </CardShell>
+        );
+      })}
+      <button className={secondaryButton} onClick={() => setActiveTab("result")}>結果へ進む</button>
     </div>
   );
 }
@@ -847,6 +696,10 @@ function ResultTab({
   plan,
   summary,
   textOutput,
+  detailsOpen,
+  setDetailsOpen,
+  dataOpen,
+  setDataOpen,
   exportJson,
   importJson,
   importMessage
@@ -854,104 +707,90 @@ function ResultTab({
   plan: Plan;
   summary: ReturnType<typeof calculateSummary>;
   textOutput: string;
+  detailsOpen: boolean;
+  setDetailsOpen: (value: boolean) => void;
+  dataOpen: boolean;
+  setDataOpen: (value: boolean) => void;
   exportJson: () => void;
   importJson: (file?: File) => void;
   importMessage: string;
 }) {
-  const weakProducts = summary.productResults.filter(
-    (row) => row.result.warnings.negativeMoneyLeft
-  );
   const conclusion =
-    summary.targetCashYen <= 0
-      ? "今年いくら手元に残したいかを入れると、今の条件で届くかを試せます。"
+    plan.targetCashYen <= 0
+      ? "全体では、目標を入れると届き具合が見えます。"
       : summary.isTargetEnough
-        ? "今の条件なら、目標を達成できそうです。"
-        : `今の条件では、目標まであと${yen(summary.shortageYen)}足りません。`;
+        ? "全体では、目標を達成できそうです。"
+        : `全体では、目標まであと${yen(summary.shortageYen)}足りません。`;
+  const totalUnits = summary.validResults.reduce((sum, row) => sum + row.card.plannedUnits, 0);
+  const priceGuide = requiredPricePerUnit(summary.targetCashYen, totalUnits);
 
   return (
     <div className="space-y-4">
       <div className={panelClass}>
-        <p className="text-sm font-bold text-leaf">結論</p>
+        <p className="text-sm font-bold text-leaf">全体結論</p>
         <h2 className="mt-1 text-2xl font-black text-stone-950">{conclusion}</h2>
-        <p className="mt-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">
-          判定：{summary.judgmentLabel}
-        </p>
       </div>
-
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+        <Metric label="目標手残り" value={yen(summary.targetCashYen)} strong />
+        <Metric label="全体見込み手残り" value={yen(summary.totalTakeHomeYen)} strong />
+        <Metric label="差額" value={yen(summary.targetGapYen)} strong />
+        <Metric label="達成率" value={percent(summary.achievementRate)} />
+      </div>
       <div className={panelClass}>
-        <h3 className="text-lg font-black">主要数字</h3>
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Metric label="目標手残り" value={yen(summary.targetCashYen)} strong />
-          <Metric label="現在見込み手残り" value={yen(summary.totalMoneyLeftYen)} strong />
-          <Metric label="差額" value={yen(summary.targetGapYen)} strong />
-          <Metric label="不足額" value={yen(summary.shortageYen)} />
-          <Metric label="達成率" value={percent(summary.achievementRate)} strong />
-          <Metric label="判定" value={summary.judgmentLabel} strong />
-          <Metric label="売る形が決まった量" value={kg(summary.decidedKg)} />
-          <Metric label="まだ売り方が決まっていない量" value={kg(summary.undecidedKg)} />
+        <h3 className="text-lg font-black">注意・警告</h3>
+        <div className="mt-3 space-y-2">
+          {summary.stockWarnings.length === 0 && !summary.hasMissingItems ? (
+            <p className="text-sm font-semibold text-stone-700">大きな注意はありません。</p>
+          ) : null}
+          {summary.stockWarnings.map((message) => <Notice key={message}>{message}</Notice>)}
+          {summary.hasMissingItems ? <Notice>まだ決めていない項目があります。下の「次に決めること」で確認できます。</Notice> : null}
         </div>
       </div>
-
       <div className={panelClass}>
-        <h3 className="text-lg font-black">改善シナリオ</h3>
-        <div className="mt-3 space-y-2 text-sm font-semibold leading-6 text-stone-800">
-          {summary.canEstimateRequiredSalesKg && summary.requiredSalesKg !== null && summary.additionalRequiredKg !== null ? (
-            <p className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2">
-              今の売値のままなら、目標まで合計で{kg(summary.requiredSalesKg)}売る必要があります。今の予定から見ると、あと{kg(summary.additionalRequiredKg)}必要です。
-            </p>
-          ) : (
-            <Notice>売値や費用がまだ決まっていないため、必要な販売量を逆算できません。</Notice>
-          )}
-          {summary.canEstimateRequiredPrice && summary.requiredPricePerKg !== null && summary.additionalRequiredPricePerKg !== null ? (
-            <p className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2">
-              今の販売量のままなら、単価は{perKg(summary.requiredPricePerKg)}が目安です。今の平均から見ると、あと約{perKg(summary.additionalRequiredPricePerKg)}上げる必要があります。
-            </p>
-          ) : (
-            <Notice>売る量がまだ決まっていないため、必要な単価を逆算できません。</Notice>
-          )}
-          <p className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2">
-            今の条件で現実的に残りそうなのは{yen(summary.realisticMoneyLeftYen)}です。
-          </p>
-          {summary.hasUndecided ? (
-            <Notice>まだ{kg(summary.undecidedKg)}分の売り方が決まっていません。</Notice>
-          ) : null}
-          {weakProducts.length > 0 ? (
-            <Notice>費用が売値を上回っている売り方があります。その売り方は、売るほど手元に残るお金が減る可能性があります。</Notice>
-          ) : null}
-          {summary.hasOverDecided ? (
-            <Notice>取れた量を超えています。売る量を少し下げるか、取れそうな量を見直してください。</Notice>
-          ) : null}
+        <h3 className="text-lg font-black">カード別結果</h3>
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+          {summary.salesResults.map((row) => (
+            <div key={row.card.id} className="rounded-md border border-stone-200 bg-stone-50 p-3">
+              <p className="font-black text-stone-950">{row.card.name}</p>
+              <p className="mt-1 text-sm font-semibold text-stone-600">{row.product?.name || "売る形未選択"} / {yen(row.card.pricePerUnit)} × {row.card.plannedUnits.toLocaleString("ja-JP")}{row.product?.unitName || "個"}</p>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <Metric label="使用量" value={kg(row.usedKg)} />
+                <Metric label="売上" value={yen(row.salesYen)} />
+                <Metric label="手残り見込み" value={yen(row.takeHomeYen)} strong />
+              </div>
+              {row.missing.length > 0 ? <p className="mt-2 text-sm font-semibold text-amber-900">{row.missing.join(" / ")}</p> : null}
+            </div>
+          ))}
         </div>
       </div>
-
-      {summary.nextSteps.length > 0 ? (
+      <CardShell title="詳しい数字を見る" summary={detailsOpen ? "表示中" : "閉じています"} isOpen={detailsOpen} onToggle={() => setDetailsOpen(!detailsOpen)}>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Metric label="全体売上" value={yen(summary.totalSalesYen)} />
+          <Metric label="全体手残り" value={yen(summary.totalTakeHomeYen)} strong />
+          <Metric label="合計使用量" value={kg(summary.totalUsedKg)} />
+          <Metric label="未使用量" value={kg(summary.totalUnusedKg)} />
+          <Metric label="必要単価の目安" value={priceGuide === null ? "未設定" : yen(priceGuide)} />
+        </div>
+        <div className="space-y-2">
+          {summary.harvestUsage.map((row) => (
+            <p key={row.harvest.id} className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">
+              {row.harvest.name}: 取れた量 {kg(row.harvest.amount)} / 使用 {kg(row.usedKg)} / 超過 {kg(row.overKg)}
+            </p>
+          ))}
+        </div>
+      </CardShell>
+      {summary.hasMissingItems ? (
         <div className={panelClass}>
           <h3 className="text-lg font-black">次に決めること</h3>
-          <p className="mt-2 text-sm font-semibold text-stone-600">
-            まだ決めていない項目があります。次の項目を入れると、より正確に試せます。
-          </p>
+          <p className="mt-2 text-sm font-semibold text-stone-600">まだ決めていない項目があります。</p>
           <ul className="mt-3 list-disc space-y-2 pl-5 text-sm font-semibold text-stone-700">
-            {summary.nextSteps.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
+            {summary.missingItems.map((item) => <li key={item}>{item}</li>)}
           </ul>
         </div>
       ) : null}
-
-      <div className={panelClass}>
-        <h3 className="text-lg font-black">取れた量と売り方</h3>
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Metric label="取れた量" value={kg(summary.harvestTotalKg)} />
-          <Metric label="総売上" value={yen(summary.totalSalesYen)} />
-          <Metric label="平均で見る" value={perKg(summary.averageKgMoneyLeftYen)} />
-          <Metric label="来年の目標" value={yen(plan.nextYearTargetCashYen ?? 0)} />
-        </div>
-      </div>
-
-      <div className={panelClass}>
-        <h3 className="text-lg font-black">出力</h3>
-        <p className="mt-2 text-sm text-stone-600">入力内容はこのブラウザに自動保存されます。</p>
-        <div className="mt-4 flex flex-wrap gap-2">
+      <CardShell title="データ管理" summary="JSON出力・読み込み、バージョン情報はこちら" isOpen={dataOpen} onToggle={() => setDataOpen(!dataOpen)}>
+        <p className="text-sm text-stone-600">入力内容はこのブラウザに自動保存されます。schemaVersionは5です。</p>
+        <div className="flex flex-wrap gap-2">
           <button className={primaryButton} onClick={exportJson}>JSON出力</button>
           <label className={secondaryButton}>
             JSON読み込み
@@ -960,73 +799,36 @@ function ResultTab({
           <button className={secondaryButton} onClick={() => navigator.clipboard.writeText(textOutput)}>テキストをコピー</button>
           <button className={secondaryButton} onClick={() => window.print()}>印刷</button>
         </div>
-        {importMessage ? <p className="mt-3 text-sm font-semibold text-leaf">{importMessage}</p> : null}
-      </div>
-
-      <div className={panelClass}>
-        <h3 className="text-lg font-black">テキスト出力</h3>
-        <textarea className={`${inputClass} mt-3 min-h-96 font-mono text-sm`} value={textOutput} readOnly />
-      </div>
+        {importMessage ? <p className="text-sm font-semibold text-leaf">{importMessage}</p> : null}
+        <textarea className={`${inputClass} min-h-80 font-mono text-sm`} value={textOutput} readOnly />
+      </CardShell>
     </div>
   );
 }
 
-function ensureKgUnit(units: Unit[]) {
-  const withoutDuplicateKg = units.filter((unit) => unit.id !== "unit-kg");
-  return [createKgUnit(), ...withoutDuplicateKg];
-}
-
 function buildTextOutput(
   plan: Plan,
-  units: Unit[],
-  harvests: Harvest[],
-  products: Product[],
-  trials: Trial[]
+  harvestCards: HarvestCard[],
+  productCards: ProductCard[],
+  salesPlanCards: SalesPlanCard[]
 ) {
-  const summary = calculateSummary(plan, units, harvests, products, trials);
-  const unitMap = new Map(units.map((unit) => [unit.id, unit]));
-  const productMap = new Map(products.map((product) => [product.id, product]));
+  const summary = calculateSummary(plan, harvestCards, productCards, salesPlanCards);
+  const productMap = new Map(productCards.map((card) => [card.id, card]));
   const lines = [
-    "手残り販売計画 v1.1.0",
+    "手残り販売計画 v1.2.0",
     "",
     `作物名: ${plan.cropName || "未入力"}`,
-    `品種名: ${plan.varietyName || "未入力"}`,
-    `今年残したいお金: ${yen(plan.targetCashYen)}`,
-    `来年の目標: ${yen(plan.nextYearTargetCashYen ?? 0)}`,
-    "",
-    "取れた量"
-  ];
-
-  harvests.forEach((harvest) => {
-    const unit = unitMap.get(harvest.unitId);
-    const result = calculateHarvest(harvest, unit);
-    lines.push(`- ${harvest.name || "名前未入力"}: ${harvest.quantity}${unit?.name || ""} / ${kg(result.convertedKg)}`);
-  });
-
-  lines.push("", `取れた量合計: ${kg(summary.harvestTotalKg)}`, "", "売る形");
-  products.forEach((product) => {
-    const unit = unitMap.get(product.contentUnitId);
-    const result = calculateProduct(product, unit);
-    lines.push(`- ${product.name || "名前未入力"}: 中身 ${kg(result.contentKg)} / 1つ売ると ${yen(result.moneyLeftYen)} / ${perKg(result.kgMoneyLeftYen)}`);
-  });
-
-  lines.push("", "試した売り方");
-  trials.forEach((trial) => {
-    const product = productMap.get(trial.productId);
-    const unit = product ? unitMap.get(product.contentUnitId) : undefined;
-    const result = calculateTrial(trial, product, unit);
-    lines.push(`- ${product?.name || "売る形未選択"}: ${result.count}${product?.salesUnitLabel || "個"} / 使用 ${kg(result.usedKg)} / 余り ${kg(result.remainderKg)} / 手元に残るお金 ${yen(result.moneyLeftTotalYen)}`);
-  });
-
-  lines.push(
-    "",
-    `売る形が決まった量: ${kg(summary.decidedKg)}`,
-    `まだ売り方が決まっていない量: ${kg(summary.undecidedKg)}`,
-    `総売上: ${yen(summary.totalSalesYen)}`,
-    `手元に残るお金: ${yen(summary.totalMoneyLeftYen)}`,
-    `目標との差: ${yen(summary.targetGapYen)}`,
+    `目標手残り: ${yen(plan.targetCashYen)}`,
+    `全体見込み手残り: ${yen(summary.totalTakeHomeYen)}`,
+    `差額: ${yen(summary.targetGapYen)}`,
     `達成率: ${percent(summary.achievementRate)}`,
-    `判定: ${summary.judgmentLabel}`
-  );
+    "",
+    "販売計画"
+  ];
+  salesPlanCards.forEach((card) => {
+    const product = productMap.get(card.productId ?? "");
+    const row = calculateSalesPlan(card, undefined, product);
+    lines.push(`- ${card.name}: ${product?.name || "売る形未選択"} / ${yen(card.pricePerUnit)} x ${card.plannedUnits}${product?.unitName || "個"} / 使用 ${kg(row.usedKg)} / 見込み ${yen(row.takeHomeYen)}`);
+  });
   return lines.join("\n");
 }

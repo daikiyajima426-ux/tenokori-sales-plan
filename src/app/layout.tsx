@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "手残り販売計画",
-  description: "今の条件で目標に届くかを試せる農家向け販売計画シミュレーター。",
+  description: "複数の取れた量・売る形・販売計画を合算できる販売計画シミュレーター。",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

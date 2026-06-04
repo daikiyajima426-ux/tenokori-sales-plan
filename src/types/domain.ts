@@ -10,19 +10,69 @@ export type Plan = {
   updatedAt: string;
 };
 
-export type Unit = {
+export type HarvestCard = {
   id: string;
   name: string;
-  label: string;
-  weightKg: number;
+  amount: number;
+  unit: "kg";
   memo?: string;
   createdAt: string;
   updatedAt: string;
 };
 
-export type Harvest = {
+export type ProductCard = {
   id: string;
-  planId: string;
+  name: string;
+  unitName: string;
+  quantityPerUnit: number;
+  quantityUnit: "g" | "kg";
+  memo?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SalesPlanCard = {
+  id: string;
+  name: string;
+  harvestId?: string;
+  productId?: string;
+  pricePerUnit: number;
+  plannedUnits: number;
+  memo?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Settings = {
+  activeTab: string;
+  hasSeenIntro: boolean;
+};
+
+export type AppData = {
+  schemaVersion: 5;
+  plan: Plan;
+  harvestCards: HarvestCard[];
+  productCards: ProductCard[];
+  salesPlanCards: SalesPlanCard[];
+  settings?: Settings;
+};
+
+export type ExportData = {
+  appName: "手残り販売計画";
+  appVersion: "1.2.0";
+  exportedAt: string;
+  data: AppData;
+};
+
+export type LegacyUnit = {
+  id: string;
+  name: string;
+  label: string;
+  weightKg: number;
+};
+
+export type LegacyHarvest = {
+  id: string;
   name: string;
   unitId: string;
   quantity: number;
@@ -31,19 +81,9 @@ export type Harvest = {
   updatedAt: string;
 };
 
-export type ProductCategory =
-  | "premium"
-  | "standard"
-  | "trial"
-  | "b_grade"
-  | "wholesale"
-  | "other";
-
-export type Product = {
+export type LegacyProduct = {
   id: string;
-  planId: string;
   name: string;
-  category: ProductCategory;
   contentUnitId: string;
   contentQuantity: number;
   salesUnitLabel: string;
@@ -57,32 +97,13 @@ export type Product = {
   updatedAt: string;
 };
 
-export type TrialInputMode = "count" | "weight";
-
-export type Trial = {
+export type LegacyTrial = {
   id: string;
-  planId: string;
   productId: string;
-  inputMode: TrialInputMode;
+  inputMode: "count" | "weight";
   count?: number;
   inputWeightKg?: number;
   memo?: string;
   createdAt: string;
   updatedAt: string;
-};
-
-export type Settings = {
-  activeTab: string;
-  hasSeenIntro: boolean;
-};
-
-export type ExportData = {
-  appName: "手残り販売計画";
-  appVersion: "1.1.0";
-  exportedAt: string;
-  plan: Plan;
-  units: Unit[];
-  harvests: Harvest[];
-  products: Product[];
-  trials: Trial[];
 };

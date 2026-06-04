@@ -1,8 +1,6 @@
-import type { ProductCategory } from "@/types/domain";
-
 export const APP_NAME = "手残り販売計画";
-export const APP_VERSION = "1.1.0";
-export const SCHEMA_VERSION = 4;
+export const APP_VERSION = "1.2.0";
+export const SCHEMA_VERSION = 5;
 
 export const STORAGE_KEYS = {
   plan: "tenokori-sales-plan:v1.0:plan",
@@ -21,12 +19,3 @@ export const TABS = [
   { id: "trials", label: "試す" },
   { id: "result", label: "結果" }
 ] as const;
-
-export const PRODUCT_CATEGORY_LABELS: Record<ProductCategory, string> = {
-  premium: "良いものを高めに売る",
-  standard: "買いやすい値段で売る",
-  trial: "少量でまず食べてもらう",
-  b_grade: "余り・傷ありを無駄にしない",
-  wholesale: "まとめて売る",
-  other: "その他"
-};

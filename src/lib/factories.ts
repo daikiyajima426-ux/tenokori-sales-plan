@@ -1,5 +1,12 @@
 import { SCHEMA_VERSION } from "@/lib/constants";
-import type { Harvest, Plan, Product, Trial, Unit } from "@/types/domain";
+import type {
+  AppData,
+  HarvestCard,
+  Plan,
+  ProductCard,
+  SalesPlanCard,
+  Settings
+} from "@/types/domain";
 
 export const createId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -23,153 +30,159 @@ export function createEmptyPlan(): Plan {
   };
 }
 
-export function createKgUnit(): Unit {
-  const now = nowIso();
-  return {
-    id: "unit-kg",
-    name: "kg",
-    label: "1kg",
-    weightKg: 1,
-    memo: "標準の重さ",
-    createdAt: now,
-    updatedAt: now
-  };
-}
-
-export function createUnit(): Unit {
+export function createHarvestCard(index: number): HarvestCard {
   const now = nowIso();
   return {
     id: createId(),
-    name: "",
-    label: "",
-    weightKg: 0,
+    name: `取れた量${index}`,
+    amount: 0,
+    unit: "kg",
     memo: "",
     createdAt: now,
     updatedAt: now
   };
 }
 
-export function createHarvest(planId: string, unitId = "unit-kg"): Harvest {
+export function createProductCard(index: number): ProductCard {
   const now = nowIso();
   return {
     id: createId(),
-    planId,
-    name: "",
-    unitId,
-    quantity: 0,
+    name: `売る形${index}`,
+    unitName: "袋",
+    quantityPerUnit: 0,
+    quantityUnit: "g",
     memo: "",
     createdAt: now,
     updatedAt: now
   };
 }
 
-export function createProduct(planId: string, unitId = "unit-kg"): Product {
+export function createSalesPlanCard(index: number): SalesPlanCard {
   const now = nowIso();
   return {
     id: createId(),
-    planId,
-    name: "",
-    category: "standard",
-    contentUnitId: unitId,
-    contentQuantity: 1,
-    salesUnitLabel: "",
-    priceYen: 0,
-    packageCostYen: 0,
-    shippingCostYen: 0,
-    feeYen: 0,
-    otherCostYen: 0,
+    name: `販売計画${index}`,
+    harvestId: undefined,
+    productId: undefined,
+    pricePerUnit: 0,
+    plannedUnits: 0,
     memo: "",
     createdAt: now,
     updatedAt: now
   };
 }
 
-export function createTrial(planId: string, productId = ""): Trial {
+export function duplicateHarvestCard(card: HarvestCard, index: number): HarvestCard {
   const now = nowIso();
   return {
+    ...card,
     id: createId(),
-    planId,
-    productId,
-    inputMode: "count",
-    count: 0,
-    inputWeightKg: 0,
-    memo: "",
+    name: card.name ? `${card.name} コピー` : `取れた量${index}`,
     createdAt: now,
     updatedAt: now
   };
 }
 
-export function createSampleData() {
+export function duplicateProductCard(card: ProductCard, index: number): ProductCard {
+  const now = nowIso();
+  return {
+    ...card,
+    id: createId(),
+    name: card.name ? `${card.name} コピー` : `売る形${index}`,
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+export function duplicateSalesPlanCard(
+  card: SalesPlanCard,
+  index: number
+): SalesPlanCard {
+  const now = nowIso();
+  return {
+    ...card,
+    id: createId(),
+    name: card.name ? `${card.name} コピー` : `販売計画${index}`,
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+export function createDefaultSettings(): Settings {
+  return { activeTab: "intro", hasSeenIntro: false };
+}
+
+export function createSampleData(): AppData {
   const plan = createEmptyPlan();
   plan.cropName = "ぶどう";
   plan.varietyName = "シャインマスカット";
   plan.targetCashYen = 1200000;
   plan.nextYearTargetCashYen = 3000000;
-  plan.memo = "今年は固定客を増やしたい";
+  plan.memo = "複数の売り方で目標に近づける";
 
-  const kgUnit = createKgUnit();
-  const boxUnit = { ...createUnit(), name: "箱", label: "1箱", weightKg: 5 };
-  const bunchUnit = { ...createUnit(), name: "房", label: "1房", weightKg: 0.55 };
-  const units = [kgUnit, boxUnit, bunchUnit];
-
-  const harvests: Harvest[] = [
-    { ...createHarvest(plan.id, boxUnit.id), name: "第1収穫分", quantity: 5 },
-    { ...createHarvest(plan.id, bunchUnit.id), name: "第2収穫分", quantity: 120 },
-    { ...createHarvest(plan.id, kgUnit.id), name: "業務用分", quantity: 80 }
+  const harvestCards: HarvestCard[] = [
+    { ...createHarvestCard(1), name: "通常品", amount: 120 },
+    { ...createHarvestCard(2), name: "規格外", amount: 20 },
+    { ...createHarvestCard(3), name: "加工向け", amount: 15 }
   ];
 
-  const products: Product[] = [
+  const productCards: ProductCard[] = [
     {
-      ...createProduct(plan.id, kgUnit.id),
-      name: "2kg箱",
-      category: "premium",
-      contentQuantity: 2,
-      salesUnitLabel: "箱",
-      priceYen: 4200,
-      packageCostYen: 250,
-      shippingCostYen: 900,
-      feeYen: 150
+      ...createProductCard(1),
+      name: "直売所用",
+      unitName: "袋",
+      quantityPerUnit: 300,
+      quantityUnit: "g"
     },
     {
-      ...createProduct(plan.id, kgUnit.id),
-      name: "500g袋",
-      category: "trial",
-      contentQuantity: 0.5,
-      salesUnitLabel: "袋",
-      priceYen: 800,
-      packageCostYen: 30
+      ...createProductCard(2),
+      name: "飲食店用",
+      unitName: "箱",
+      quantityPerUnit: 2,
+      quantityUnit: "kg"
     },
     {
-      ...createProduct(plan.id, bunchUnit.id),
-      name: "3房入り箱",
-      category: "standard",
-      contentQuantity: 3,
-      salesUnitLabel: "箱",
-      priceYen: 3600,
-      packageCostYen: 250,
-      shippingCostYen: 900,
-      feeYen: 150
-    },
-    {
-      ...createProduct(plan.id, kgUnit.id),
-      name: "訳あり1kg袋",
-      category: "b_grade",
-      contentQuantity: 1,
-      salesUnitLabel: "袋",
-      priceYen: 1000,
-      packageCostYen: 30
+      ...createProductCard(3),
+      name: "規格外まとめ売り",
+      unitName: "kg",
+      quantityPerUnit: 1,
+      quantityUnit: "kg"
     }
   ];
 
-  const trials: Trial[] = [
-    { ...createTrial(plan.id, products[0].id), inputMode: "count", count: 20 },
+  const salesPlanCards: SalesPlanCard[] = [
     {
-      ...createTrial(plan.id, products[1].id),
-      inputMode: "weight",
-      inputWeightKg: 30
+      ...createSalesPlanCard(1),
+      name: "直売所で袋売り",
+      harvestId: harvestCards[0].id,
+      productId: productCards[0].id,
+      pricePerUnit: 500,
+      plannedUnits: 200
     },
-    { ...createTrial(plan.id, products[2].id), inputMode: "count", count: 10 }
+    {
+      ...createSalesPlanCard(2),
+      name: "飲食店向け箱売り",
+      harvestId: harvestCards[0].id,
+      productId: productCards[1].id,
+      pricePerUnit: 2000,
+      plannedUnits: 30
+    },
+    {
+      ...createSalesPlanCard(3),
+      name: "規格外まとめ売り",
+      harvestId: harvestCards[1].id,
+      productId: productCards[2].id,
+      pricePerUnit: 250,
+      plannedUnits: 20
+    }
   ];
 
-  return { plan, units, harvests, products, trials };
+  return {
+    schemaVersion: 5,
+    plan,
+    harvestCards,
+    productCards,
+    salesPlanCards,
+    settings: createDefaultSettings()
+  };
 }
