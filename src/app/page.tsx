@@ -77,6 +77,48 @@ const dangerButton =
 
 const percent = (value: number | null) =>
   value === null ? "未設定" : `${Math.round(value * 100).toLocaleString("ja-JP")}%`;
+const clampPercent = (value: number | null | undefined) =>
+  value === null || value === undefined || !Number.isFinite(value)
+    ? 0
+    : Math.min(100, Math.max(0, Math.round(value * 100)));
+
+function barColorClass(kind: "ok" | "warn" | "danger" | "info" | "muted") {
+  if (kind === "ok") return "bg-leaf";
+  if (kind === "warn") return "bg-amber-500";
+  if (kind === "danger") return "bg-red-600";
+  if (kind === "info") return "bg-sky-600";
+  return "bg-stone-400";
+}
+
+function progressKind(value: number | null, dangerAtOver = false) {
+  if (value === null) return "muted";
+  if (dangerAtOver && value > 1) return "danger";
+  if (value >= 1) return "ok";
+  if (value >= 0.8) return "warn";
+  return "danger";
+}
+
+function ProgressBar({
+  value,
+  label,
+  kind
+}: {
+  value: number | null;
+  label: string;
+  kind: "ok" | "warn" | "danger" | "info" | "muted";
+}) {
+  if (value === null) return null;
+  return (
+    <div className="mt-2">
+      <div className="h-3 overflow-hidden rounded-full bg-stone-200" aria-label={label}>
+        <div
+          className={`h-full rounded-full ${barColorClass(kind)}`}
+          style={{ width: `${clampPercent(value)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
 
 function NumberInput({
   label,
@@ -161,6 +203,134 @@ function AttentionGroup({ title, items }: { title: string; items: string[] }) {
       <div className="mt-2 space-y-2">
         {items.map((item) => <Notice key={`${title}-${item}`}>{item}</Notice>)}
       </div>
+    </div>
+  );
+}
+
+function TargetProgress({
+  summary
+}: {
+  summary: ReturnType<typeof calculateSummary>;
+}) {
+  if (summary.targetCashYen <= 0) {
+    return (
+      <p className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">
+        目標を入れると達成率が表示されます。
+      </p>
+    );
+  }
+  const kind = progressKind(summary.achievementRate);
+  const gapText = summary.isTargetEnough
+    ? `目標を${yen(Math.max(0, summary.targetGapYen))}上回っています`
+    : `目標まであと${yen(summary.shortageYen)}`;
+  return (
+    <div className="rounded-md border border-stone-200 bg-stone-50 px-3 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-black text-stone-950">目標達成率：{percent(summary.achievementRate)}</p>
+        <p className="text-sm font-semibold text-stone-700">{gapText}</p>
+      </div>
+      <p className="mt-1 text-xs font-semibold text-stone-600">
+        目標 {yen(summary.targetCashYen)} / 販売見込み額 {yen(summary.totalTakeHomeYen)}
+      </p>
+      <ProgressBar value={summary.achievementRate} label="目標達成率" kind={kind} />
+    </div>
+  );
+}
+
+function InventoryUsageList({
+  summary,
+  compact = false
+}: {
+  summary: ReturnType<typeof calculateSummary>;
+  compact?: boolean;
+}) {
+  if (summary.harvestUsage.length === 0) {
+    return (
+      <p className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">
+        取れた量を入れると在庫使用状況が表示されます。
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {summary.harvestUsage.map((row) => {
+        const harvestKg = row.harvest.amount;
+        const usageRate = harvestKg > 0 ? row.usedKg / harvestKg : null;
+        const kind = progressKind(usageRate, true);
+        return (
+          <div
+            key={row.harvest.id}
+            className={`rounded-md border px-3 py-2 ${row.hasOver ? "border-red-200 bg-red-50" : "border-stone-200 bg-stone-50"}`}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-black text-stone-950">
+                {row.harvest.name || "取れた量"}：{kg(row.usedKg)} / {kg(harvestKg)}
+              </p>
+              <p className={`text-sm font-semibold ${row.hasOver ? "text-red-800" : "text-stone-700"}`}>
+                使用率：{percent(usageRate)}{row.hasOver ? ` / ${kg(row.overKg)}超過` : ""}
+              </p>
+            </div>
+            {!compact ? (
+              <ProgressBar value={usageRate} label={`${row.harvest.name}の在庫使用率`} kind={kind} />
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function RoleCompositionBars({
+  summary
+}: {
+  summary: ReturnType<typeof calculateSummary>;
+}) {
+  if (summary.salesResults.length === 0) {
+    return (
+      <p className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">
+        販売計画を入れると結果が表示されます。
+      </p>
+    );
+  }
+  if (summary.validResults.length === 0) {
+    return (
+      <p className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">
+        売る形・売値・販売予定数を入れると集計できます。
+      </p>
+    );
+  }
+  return (
+    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+      {summary.compositionRows.map((row) => {
+        const kind = row.role === "unset" ? "muted" : "info";
+        return (
+          <div key={row.role} className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2">
+            <p className="font-black text-stone-950">
+              {row.label}：{row.count}件 / {yen(row.salesYen)} / {percent(row.salesShare)}
+            </p>
+            <p className="mt-1 text-xs font-semibold text-stone-600">使用 {kg(row.usedKg)}</p>
+            <ProgressBar value={row.salesShare} label={`${row.label}の販売見込み割合`} kind={kind} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function SalesContributionBar({
+  row,
+  totalSalesYen
+}: {
+  row: ReturnType<typeof calculateSummary>["salesResults"][number];
+  totalSalesYen: number;
+}) {
+  const share = totalSalesYen > 0 ? row.takeHomeYen / totalSalesYen : null;
+  return (
+    <div className="mt-2">
+      <p className="text-xs font-semibold text-stone-600">
+        全体に対する割合：{percent(share)}
+      </p>
+      <ProgressBar value={share} label={`${row.card.name}の寄与度`} kind="info" />
     </div>
   );
 }
@@ -737,6 +907,18 @@ function SalesPlanCardsTab({
               </p>
             </div>
           </div>
+          <div>
+            <p className="text-sm font-black text-stone-800">目標達成</p>
+            <div className="mt-2">
+              <TargetProgress summary={summary} />
+            </div>
+          </div>
+          <div>
+            <p className="text-sm font-black text-stone-800">在庫使用率</p>
+            <div className="mt-2">
+              <InventoryUsageList summary={summary} />
+            </div>
+          </div>
           <AttentionGroup title="在庫注意" items={summary.stockWarnings} />
           <AttentionGroup title="目標注意" items={summary.targetWarnings} />
           <AttentionGroup title="商品構成注意" items={summary.compositionWarnings} />
@@ -1124,6 +1306,9 @@ function ResultTab({
           <Metric label="差額" value={yen(summary.targetGapYen)} strong />
           <Metric label="達成率" value={percent(summary.achievementRate)} />
         </div>
+        <div className="mt-4">
+          <TargetProgress summary={summary} />
+        </div>
       </div>
       <div className={panelClass}>
         <h3 className="text-lg font-black">確認しておきたいこと</h3>
@@ -1150,23 +1335,12 @@ function ResultTab({
       <div className={panelClass}>
         <h3 className="text-lg font-black">商品構成チェック</h3>
         <p className="mt-1 text-sm font-semibold text-stone-600">販売計画を、入口・日常・利益・ブランド・ロス削減の役割ごとに見ます。</p>
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {summary.compositionRows.map((row) => (
-            <div key={row.role} className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2">
-              <p className="font-black text-stone-950">{row.label}：{row.count}件 / {yen(row.salesYen)}</p>
-              <p className="mt-1 text-xs font-semibold text-stone-600">比率 {percent(row.salesShare)} / 使用 {kg(row.usedKg)}</p>
-            </div>
-          ))}
-        </div>
+        <RoleCompositionBars summary={summary} />
       </div>
       <div className={panelClass}>
         <h3 className="text-lg font-black">在庫使用状況</h3>
-        <div className="mt-3 space-y-2">
-          {summary.harvestUsage.map((row) => (
-            <p key={row.harvest.id} className={`rounded-md border px-3 py-2 text-sm font-semibold ${row.hasOver ? "border-amber-200 bg-amber-50 text-amber-900" : "border-stone-200 bg-stone-50 text-stone-700"}`}>
-              {row.harvest.name || "取れた量"}：{kg(row.usedKg)} / {kg(row.harvest.amount)} 使用中{row.hasOver ? `、${kg(row.overKg)}超過` : ""}
-            </p>
-          ))}
+        <div className="mt-3">
+          <InventoryUsageList summary={summary} />
         </div>
       </div>
       <div className={panelClass}>
@@ -1176,6 +1350,7 @@ function ResultTab({
             <div key={row.card.id} className="rounded-md border border-stone-200 bg-stone-50 p-3">
               <p className="font-black text-stone-950">{row.card.name}</p>
               <p className="mt-1 text-sm font-black text-leaf">{PRODUCT_ROLE_LABELS[row.card.productRole ?? "unset"]} / 使用量 {kg(row.usedKg)} / 販売見込み {yen(row.takeHomeYen)}</p>
+              <SalesContributionBar row={row} totalSalesYen={summary.totalTakeHomeYen} />
               <details className="mt-2">
                 <summary className="cursor-pointer text-sm font-semibold text-stone-600">詳細を見る</summary>
                 <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -1237,7 +1412,7 @@ function buildTextOutput(
   const summary = calculateSummary(plan, harvestCards, productCards, salesPlanCards);
   const productMap = new Map(productCards.map((card) => [card.id, card]));
   const lines = [
-    "農産物販売プランナー v1.3.0",
+    "農産物販売プランナー v1.3.1",
     "",
     `作物名: ${plan.cropName || "未入力"}`,
     `目標手残り: ${yen(plan.targetCashYen)}`,
