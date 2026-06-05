@@ -1,7 +1,7 @@
 import type { ProductRole, SalesPolicy } from "@/types/domain";
 
 export const APP_NAME = "農産物販売プランナー";
-export const APP_VERSION = "1.3.1";
+export const APP_VERSION = "1.4.0";
 export const SCHEMA_VERSION = 5;
 
 export const STORAGE_KEYS = {

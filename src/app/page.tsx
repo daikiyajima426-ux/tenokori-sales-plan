@@ -90,6 +90,15 @@ function barColorClass(kind: "ok" | "warn" | "danger" | "info" | "muted") {
   return "bg-stone-400";
 }
 
+function roleBarColorClass(role: ProductRole) {
+  if (role === "entry") return "bg-sky-500";
+  if (role === "daily") return "bg-leaf";
+  if (role === "profit") return "bg-amber-500";
+  if (role === "brand") return "bg-violet-500";
+  if (role === "lossReduction") return "bg-orange-500";
+  return "bg-stone-400";
+}
+
 function progressKind(value: number | null, dangerAtOver = false) {
   if (value === null) return "muted";
   if (dangerAtOver && value > 1) return "danger";
@@ -115,6 +124,38 @@ function ProgressBar({
           className={`h-full rounded-full ${barColorClass(kind)}`}
           style={{ width: `${clampPercent(value)}%` }}
         />
+      </div>
+    </div>
+  );
+}
+
+function StackedBar({
+  segments,
+  label
+}: {
+  segments: Array<{
+    key: string;
+    label: string;
+    value: number | null;
+    className: string;
+  }>;
+  label: string;
+}) {
+  const visibleSegments = segments.filter(
+    (segment) => segment.value !== null && Number.isFinite(segment.value) && segment.value > 0
+  );
+  if (visibleSegments.length === 0) return null;
+  return (
+    <div className="mt-3">
+      <div className="flex h-4 overflow-hidden rounded-full bg-stone-200" aria-label={label}>
+        {visibleSegments.map((segment) => (
+          <div
+            key={segment.key}
+            className={`h-full ${segment.className}`}
+            style={{ width: `${clampPercent(segment.value)}%` }}
+            title={`${segment.label} ${percent(segment.value)}`}
+          />
+        ))}
       </div>
     </div>
   );
@@ -280,6 +321,56 @@ function InventoryUsageList({
   );
 }
 
+function HarvestCompositionBars({
+  summary
+}: {
+  summary: ReturnType<typeof calculateSummary>;
+}) {
+  if (summary.harvestUsage.length === 0) {
+    return (
+      <p className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">
+        取れた量を入れると構成比が表示されます。
+      </p>
+    );
+  }
+  if (summary.totalHarvestKg <= 0) {
+    return (
+      <p className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">
+        取れた量のkgを入れると構成比が表示されます。
+      </p>
+    );
+  }
+  const palette = ["bg-leaf", "bg-sky-500", "bg-amber-500", "bg-orange-500", "bg-violet-500", "bg-stone-400"];
+  return (
+    <div className="rounded-md border border-stone-200 bg-stone-50 px-3 py-3">
+      <p className="text-sm font-black text-stone-800">取れた量の構成</p>
+      <StackedBar
+        label="取れた量の構成比"
+        segments={summary.harvestUsage.map((row, index) => ({
+          key: row.harvest.id,
+          label: row.harvest.name || "取れた量",
+          value: row.harvest.amount / summary.totalHarvestKg,
+          className: palette[index % palette.length]
+        }))}
+      />
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {summary.harvestUsage.map((row, index) => {
+          const share = row.harvest.amount / summary.totalHarvestKg;
+          return (
+            <div key={row.harvest.id} className="flex items-center justify-between gap-3 text-sm font-semibold text-stone-700">
+              <span className="flex min-w-0 items-center gap-2">
+                <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${palette[index % palette.length]}`} />
+                <span className="min-w-0 truncate">{row.harvest.name || "取れた量"}</span>
+              </span>
+              <span className="shrink-0">{kg(row.harvest.amount)} / {percent(share)}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function RoleCompositionBars({
   summary
 }: {
@@ -299,20 +390,42 @@ function RoleCompositionBars({
       </p>
     );
   }
+  const maxCount = Math.max(...summary.compositionRows.map((row) => row.count), 0);
   return (
-    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-      {summary.compositionRows.map((row) => {
-        const kind = row.role === "unset" ? "muted" : "info";
-        return (
-          <div key={row.role} className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2">
-            <p className="font-black text-stone-950">
-              {row.label}：{row.count}件 / {yen(row.salesYen)} / {percent(row.salesShare)}
-            </p>
-            <p className="mt-1 text-xs font-semibold text-stone-600">使用 {kg(row.usedKg)}</p>
-            <ProgressBar value={row.salesShare} label={`${row.label}の販売見込み割合`} kind={kind} />
-          </div>
-        );
-      })}
+    <div className="mt-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-3">
+      <p className="text-sm font-black text-stone-800">商品構成</p>
+      <StackedBar
+        label="商品役割ごとの販売見込み額構成比"
+        segments={summary.compositionRows.map((row) => ({
+          key: row.role,
+          label: row.label,
+          value: row.salesShare,
+          className: roleBarColorClass(row.role)
+        }))}
+      />
+      <div className="mt-3 space-y-2">
+        {summary.compositionRows.map((row) => {
+          const countShare = maxCount > 0 ? row.count / maxCount : null;
+          const isUnset = row.role === "unset";
+          return (
+            <div key={row.role} className="rounded-md border border-white/70 bg-white px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-black text-stone-950">
+                  <span className={`mr-2 inline-block h-2.5 w-2.5 rounded-full ${roleBarColorClass(row.role)}`} />
+                  {row.label}
+                </p>
+                <p className={`text-sm font-semibold ${isUnset ? "text-stone-600" : "text-stone-700"}`}>
+                  {row.count}件 / {yen(row.salesYen)} / {percent(row.salesShare)}
+                </p>
+              </div>
+              <div className="mt-2">
+                <p className="text-xs font-semibold text-stone-600">件数比較：{row.count}件</p>
+                <ProgressBar value={countShare} label={`${row.label}の件数比較`} kind={isUnset ? "muted" : "info"} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1334,12 +1447,13 @@ function ResultTab({
       </div>
       <div className={panelClass}>
         <h3 className="text-lg font-black">商品構成チェック</h3>
-        <p className="mt-1 text-sm font-semibold text-stone-600">販売計画を、入口・日常・利益・ブランド・ロス削減の役割ごとに見ます。</p>
+        <p className="mt-1 text-sm font-semibold text-stone-600">販売計画を、入口・日常・利益・ブランド・ロス削減の販売見込み額構成で見ます。</p>
         <RoleCompositionBars summary={summary} />
       </div>
       <div className={panelClass}>
         <h3 className="text-lg font-black">在庫使用状況</h3>
-        <div className="mt-3">
+        <div className="mt-3 space-y-3">
+          <HarvestCompositionBars summary={summary} />
           <InventoryUsageList summary={summary} />
         </div>
       </div>
@@ -1412,7 +1526,7 @@ function buildTextOutput(
   const summary = calculateSummary(plan, harvestCards, productCards, salesPlanCards);
   const productMap = new Map(productCards.map((card) => [card.id, card]));
   const lines = [
-    "農産物販売プランナー v1.3.1",
+    "農産物販売プランナー v1.4.0",
     "",
     `作物名: ${plan.cropName || "未入力"}`,
     `目標手残り: ${yen(plan.targetCashYen)}`,
