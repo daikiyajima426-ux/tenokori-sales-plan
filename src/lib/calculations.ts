@@ -252,13 +252,37 @@ export function referencePriceForSalesPlan(
 }
 
 export function priceSliderMax() {
+  return 1000;
+}
+
+export function priceSliderPriceMax() {
   return 100000;
 }
 
-export function priceSliderStep(pricePerUnit: number) {
-  const price = safeNumber(pricePerUnit);
-  if (price >= 30000) return 10000;
-  if (price > 10000) return 1000;
-  if (price > 1000) return 100;
-  return 10;
+export function sliderValueToPrice(sliderValue: number) {
+  const value = Math.min(1000, Math.max(0, Math.round(safeNumber(sliderValue))));
+  if (value <= 500) {
+    return Math.round(((value / 500) * 1000) / 10) * 10;
+  }
+  if (value <= 750) {
+    return 1000 + Math.round((((value - 500) / 250) * 9000) / 100) * 100;
+  }
+  if (value <= 900) {
+    return 10000 + Math.round((((value - 750) / 150) * 20000) / 1000) * 1000;
+  }
+  return 30000 + Math.round((((value - 900) / 100) * 70000) / 10000) * 10000;
+}
+
+export function priceToSliderValue(pricePerUnit: number) {
+  const price = Math.min(100000, Math.max(0, safeNumber(pricePerUnit)));
+  if (price <= 1000) {
+    return Math.round((price / 1000) * 500);
+  }
+  if (price <= 10000) {
+    return Math.round(500 + ((price - 1000) / 9000) * 250);
+  }
+  if (price <= 30000) {
+    return Math.round(750 + ((price - 10000) / 20000) * 150);
+  }
+  return Math.round(900 + ((price - 30000) / 70000) * 100);
 }

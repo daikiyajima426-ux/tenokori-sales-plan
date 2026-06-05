@@ -12,12 +12,14 @@ import {
   calculateSalesPlan,
   calculateSummary,
   formatProductAmount,
+  priceSliderPriceMax,
   priceSliderMax,
-  priceSliderStep,
+  priceToSliderValue,
   productUnitKg,
   referencePriceForSalesPlan,
   requiredPricePerUnit,
-  round
+  round,
+  sliderValueToPrice
 } from "@/lib/calculations";
 import {
   createDefaultSettings,
@@ -682,8 +684,9 @@ function SalesPlanCardsTab({
         const plannedUnits = Number.isFinite(card.plannedUnits) ? card.plannedUnits : 0;
         const currentPrice = Number.isFinite(card.pricePerUnit) ? card.pricePerUnit : 0;
         const sliderMax = priceSliderMax();
-        const sliderStep = priceSliderStep(currentPrice);
-        const isManualHighPrice = currentPrice > sliderMax;
+        const sliderPriceMax = priceSliderPriceMax();
+        const sliderValue = priceToSliderValue(currentPrice);
+        const isManualHighPrice = currentPrice > sliderPriceMax;
         const otherCardsSalesYen = summary.validResults
           .filter((row) => row.card.id !== card.id)
           .reduce((sum, row) => sum + row.salesYen, 0);
@@ -759,16 +762,16 @@ function SalesPlanCardsTab({
                   type="range"
                   min={0}
                   max={sliderMax}
-                  step={sliderStep}
-                  value={Math.min(currentPrice, sliderMax)}
-                  onChange={(event) => updateCard(card.id, { pricePerUnit: Number(event.target.value) })}
+                  step={1}
+                  value={sliderValue}
+                  onChange={(event) => updateCard(card.id, { pricePerUnit: sliderValueToPrice(Number(event.target.value)) })}
                 />
                 {isManualHighPrice ? (
                   <p className="mt-2 text-xs font-semibold text-amber-700">10万円を超える価格は手入力で扱っています。</p>
                 ) : null}
                 <div className="mt-1 flex items-center justify-between text-xs font-bold text-stone-500">
                   <span>0円</span>
-                  <span>{yen(sliderMax)}</span>
+                  <span>{yen(sliderPriceMax)}</span>
                 </div>
                 <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <div className="rounded-md border border-stone-200 bg-white p-3">
