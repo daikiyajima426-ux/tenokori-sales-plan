@@ -682,7 +682,62 @@ function SalesPlanCardsTab({
           <h2 className="text-xl font-black">販売計画カード一覧</h2>
           <p className="mt-1 text-sm font-semibold text-stone-600">どの取れた量を、どの売る形で、何個・いくらで売るかを試します。</p>
         </div>
-        <button className={primaryButton} onClick={() => setCards((current) => [...current, createSalesPlanCard(current.length + 1)])}>販売計画を追加</button>
+      </div>
+      <div className={panelClass}>
+        <label className="flex cursor-pointer items-start gap-3">
+          <input
+            className="mt-1 h-5 w-5 accent-leaf"
+            type="checkbox"
+            checked={settings.showPolicyAllocation}
+            onChange={(event) =>
+              setSettings((current) => ({
+                ...current,
+                showPolicyAllocation: event.target.checked
+              }))
+            }
+          />
+          <span>
+            <span className="block text-base font-black text-stone-950">
+              売り方の方針に合わせて配分案を見る
+            </span>
+            <span className="mt-1 block text-sm font-semibold leading-6 text-stone-600">
+              表示専用の確認候補です。販売計画カードの価格・数量・紐づけは自動では変わりません。
+            </span>
+          </span>
+        </label>
+        {settings.showPolicyAllocation ? (
+          <div className="mt-4 space-y-4">
+            <label className="block">
+              <span className={labelClass}>売り方の方針</span>
+              <select
+                className={inputClass}
+                value={settings.selectedSalesPolicy}
+                onChange={(event) =>
+                  setSettings((current) => ({
+                    ...current,
+                    selectedSalesPolicy: event.target.value as SalesPolicy
+                  }))
+                }
+              >
+                {SALES_POLICY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {cards.length === 0 ? (
+              <p className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">
+                販売計画カードを作ると、方針に合わせた確認候補が表示されます。
+              </p>
+            ) : (
+              <PolicyAllocationPanel
+                policy={settings.selectedSalesPolicy}
+                summary={summary}
+              />
+            )}
+          </div>
+        ) : null}
       </div>
       {cards.length === 0 ? <Notice>販売計画：未入力。売り方をカードで追加してください。</Notice> : null}
       {stockWarnings.map((message) => <Notice key={message}>{message}</Notice>)}
@@ -838,56 +893,7 @@ function SalesPlanCardsTab({
           </CardShell>
         );
       })}
-      <div className={panelClass}>
-        <label className="flex cursor-pointer items-start gap-3">
-          <input
-            className="mt-1 h-5 w-5 accent-leaf"
-            type="checkbox"
-            checked={settings.showPolicyAllocation}
-            onChange={(event) =>
-              setSettings((current) => ({
-                ...current,
-                showPolicyAllocation: event.target.checked
-              }))
-            }
-          />
-          <span>
-            <span className="block text-base font-black text-stone-950">
-              売り方の方針に合わせて配分案を見る
-            </span>
-            <span className="mt-1 block text-sm font-semibold leading-6 text-stone-600">
-              表示専用の確認候補です。販売計画カードの価格・数量・紐づけは自動では変わりません。
-            </span>
-          </span>
-        </label>
-        {settings.showPolicyAllocation ? (
-          <div className="mt-4 space-y-4">
-            <label className="block">
-              <span className={labelClass}>売り方の方針</span>
-              <select
-                className={inputClass}
-                value={settings.selectedSalesPolicy}
-                onChange={(event) =>
-                  setSettings((current) => ({
-                    ...current,
-                    selectedSalesPolicy: event.target.value as SalesPolicy
-                  }))
-                }
-              >
-                {SALES_POLICY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <PolicyAllocationPanel
-              policy={settings.selectedSalesPolicy}
-              summary={summary}
-            />
-          </div>
-        ) : null}
-      </div>
+      <button className={primaryButton} onClick={() => setCards((current) => [...current, createSalesPlanCard(current.length + 1)])}>販売計画を追加</button>
       <button className={secondaryButton} onClick={() => setActiveTab("result")}>結果へ進む</button>
     </div>
   );
