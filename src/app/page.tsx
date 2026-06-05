@@ -671,10 +671,22 @@ function SalesPlanCardsTab({
   closeCard: (id: string) => void;
   setActiveTab: (tab: TabId) => void;
 }) {
+  const [currentCheckOpen, setCurrentCheckOpen] = useState(false);
   const updateCard = (id: string, patch: Partial<SalesPlanCard>) =>
     setCards((current) => current.map((card) => card.id === id ? { ...card, ...patch, updatedAt: nowIso() } : card));
   const harvestMap = new Map(harvestCards.map((card) => [card.id, card]));
   const productMap = new Map(productCards.map((card) => [card.id, card]));
+  const targetStatus =
+    plan.targetCashYen <= 0
+      ? "目標未入力"
+      : summary.isTargetEnough
+        ? "目標達成見込み"
+        : `目標まであと${yen(summary.shortageYen)}`;
+  const stockStatus =
+    summary.stockWarnings.length > 0
+      ? "在庫注意あり"
+      : "在庫面では大きな超過なし";
+  const currentCheckSummary = `${targetStatus} / ${stockStatus} / 方針：${SALES_POLICY_LABELS[settings.selectedSalesPolicy]}`;
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -683,7 +695,12 @@ function SalesPlanCardsTab({
           <p className="mt-1 text-sm font-semibold text-stone-600">どの取れた量を、どの売る形で、何個・いくらで売るかを試します。</p>
         </div>
       </div>
-      <div className={panelClass}>
+      <CardShell
+        title="現在の確認"
+        summary={currentCheckSummary}
+        isOpen={currentCheckOpen}
+        onToggle={() => setCurrentCheckOpen(!currentCheckOpen)}
+      >
         <label className="flex cursor-pointer items-start gap-3">
           <input
             className="mt-1 h-5 w-5 accent-leaf"
@@ -705,8 +722,28 @@ function SalesPlanCardsTab({
             </span>
           </span>
         </label>
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm font-black text-stone-800">基本確認</p>
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <p className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">
+                {targetStatus}
+              </p>
+              <p className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">
+                {stockStatus}
+              </p>
+              <p className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">
+                方針：{SALES_POLICY_LABELS[settings.selectedSalesPolicy]}
+              </p>
+            </div>
+          </div>
+          <AttentionGroup title="在庫注意" items={summary.stockWarnings} />
+          <AttentionGroup title="目標注意" items={summary.targetWarnings} />
+          <AttentionGroup title="商品構成注意" items={summary.compositionWarnings} />
+          <AttentionGroup title="仮説不足" items={summary.hypothesisWarnings} />
+        </div>
         {settings.showPolicyAllocation ? (
-          <div className="mt-4 space-y-4">
+          <div className="space-y-4">
             <label className="block">
               <span className={labelClass}>売り方の方針</span>
               <select
@@ -738,7 +775,7 @@ function SalesPlanCardsTab({
             )}
           </div>
         ) : null}
-      </div>
+      </CardShell>
       {cards.length === 0 ? <Notice>販売計画：未入力。売り方をカードで追加してください。</Notice> : null}
       {stockWarnings.map((message) => <Notice key={message}>{message}</Notice>)}
       {cards.map((card, index) => {
