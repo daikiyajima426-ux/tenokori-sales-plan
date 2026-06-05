@@ -3,9 +3,14 @@ import type {
   Plan,
   ProductRole,
   ProductCard,
+  SalesPolicy,
   SalesPlanCard
 } from "@/types/domain";
-import { PRODUCT_ROLE_LABELS, PRODUCT_ROLE_ORDER } from "@/lib/constants";
+import {
+  PRODUCT_ROLE_LABELS,
+  PRODUCT_ROLE_ORDER,
+  SALES_POLICY_ROLE_PRIORITY
+} from "@/lib/constants";
 
 const safeNumber = (value: number | undefined | null) =>
   Number.isFinite(value) ? Number(value) : 0;
@@ -285,4 +290,36 @@ export function priceToSliderValue(pricePerUnit: number) {
     return Math.round(750 + ((price - 10000) / 20000) * 150);
   }
   return Math.round(900 + ((price - 30000) / 70000) * 100);
+}
+
+export type PolicyPriority = "high" | "medium" | "low" | "unset";
+
+export function productRolePolicyPriority(
+  policy: SalesPolicy,
+  role: ProductRole
+): PolicyPriority {
+  if (role === "unset") return "unset";
+  const priority = SALES_POLICY_ROLE_PRIORITY[policy];
+  if (priority.high.includes(role)) return "high";
+  if (priority.medium.includes(role)) return "medium";
+  if (priority.low.includes(role)) return "low";
+  return "unset";
+}
+
+export function productRolePolicyRank(policy: SalesPolicy, role: ProductRole) {
+  const priority = productRolePolicyPriority(policy, role);
+  if (priority === "high") return 3;
+  if (priority === "medium") return 2;
+  if (priority === "low") return 1;
+  return 0;
+}
+
+export function policyRoleLabels(
+  policy: SalesPolicy,
+  priority: "high" | "medium" | "low"
+) {
+  const roles = SALES_POLICY_ROLE_PRIORITY[policy][priority];
+  return roles.length > 0
+    ? roles.map((role) => PRODUCT_ROLE_LABELS[role]).join("・")
+    : "該当なし";
 }

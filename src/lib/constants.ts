@@ -1,5 +1,7 @@
+import type { ProductRole, SalesPolicy } from "@/types/domain";
+
 export const APP_NAME = "農産物販売プランナー";
-export const APP_VERSION = "1.2.2";
+export const APP_VERSION = "1.3.0";
 export const SCHEMA_VERSION = 5;
 
 export const STORAGE_KEYS = {
@@ -46,3 +48,57 @@ export const PRODUCT_ROLE_ORDER = [
   "lossReduction",
   "unset"
 ] as const;
+
+export const SALES_POLICY_OPTIONS = [
+  { value: "balanced", label: "バランス型" },
+  { value: "awareness", label: "まず知ってもらう" },
+  { value: "stable", label: "安定して売る" },
+  { value: "profit", label: "手残りを増やす" },
+  { value: "brand", label: "ブランドを作る" },
+  { value: "lossReduction", label: "ロスを減らす" }
+] as const;
+
+export const SALES_POLICY_LABELS: Record<SalesPolicy, string> = {
+  balanced: "バランス型",
+  awareness: "まず知ってもらう",
+  stable: "安定して売る",
+  profit: "手残りを増やす",
+  brand: "ブランドを作る",
+  lossReduction: "ロスを減らす"
+};
+
+export const SALES_POLICY_ROLE_PRIORITY: Record<
+  SalesPolicy,
+  { high: ProductRole[]; medium: ProductRole[]; low: ProductRole[] }
+> = {
+  balanced: {
+    high: ["daily", "profit"],
+    medium: ["entry", "brand", "lossReduction"],
+    low: []
+  },
+  awareness: {
+    high: ["entry"],
+    medium: ["daily", "brand"],
+    low: ["profit", "lossReduction"]
+  },
+  stable: {
+    high: ["daily"],
+    medium: ["entry", "profit"],
+    low: ["brand", "lossReduction"]
+  },
+  profit: {
+    high: ["profit"],
+    medium: ["daily", "brand"],
+    low: ["entry", "lossReduction"]
+  },
+  brand: {
+    high: ["brand"],
+    medium: ["profit", "daily"],
+    low: ["entry", "lossReduction"]
+  },
+  lossReduction: {
+    high: ["lossReduction"],
+    medium: ["daily", "entry"],
+    low: ["profit", "brand"]
+  }
+};

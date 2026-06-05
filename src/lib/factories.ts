@@ -110,7 +110,12 @@ export function duplicateSalesPlanCard(
 }
 
 export function createDefaultSettings(): Settings {
-  return { activeTab: "intro", hasSeenIntro: false };
+  return {
+    activeTab: "intro",
+    hasSeenIntro: false,
+    showPolicyAllocation: false,
+    selectedSalesPolicy: "balanced"
+  };
 }
 
 export function createSampleData(): AppData {

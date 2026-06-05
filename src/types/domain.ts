@@ -39,6 +39,14 @@ export type ProductRole =
   | "lossReduction"
   | "unset";
 
+export type SalesPolicy =
+  | "balanced"
+  | "awareness"
+  | "stable"
+  | "profit"
+  | "brand"
+  | "lossReduction";
+
 export type SalesPlanCard = {
   id: string;
   name: string;
@@ -55,6 +63,8 @@ export type SalesPlanCard = {
 export type Settings = {
   activeTab: string;
   hasSeenIntro: boolean;
+  showPolicyAllocation: boolean;
+  selectedSalesPolicy: SalesPolicy;
 };
 
 export type AppData = {
@@ -68,7 +78,7 @@ export type AppData = {
 
 export type ExportData = {
   appName: "農産物販売プランナー";
-  appVersion: "1.2.2";
+  appVersion: "1.3.0";
   exportedAt: string;
   data: AppData;
 };

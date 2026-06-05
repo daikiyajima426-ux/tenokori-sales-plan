@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   PRODUCT_ROLE_LABELS,
   PRODUCT_ROLE_OPTIONS,
+  SALES_POLICY_LABELS,
+  SALES_POLICY_OPTIONS,
   SCHEMA_VERSION,
   STORAGE_KEYS,
   TABS
@@ -15,7 +17,9 @@ import {
   priceSliderPriceMax,
   priceSliderMax,
   priceToSliderValue,
+  policyRoleLabels,
   productUnitKg,
+  productRolePolicyRank,
   referencePriceForSalesPlan,
   requiredPricePerUnit,
   round,
@@ -53,6 +57,7 @@ import type {
   Plan,
   ProductCard,
   ProductRole,
+  SalesPolicy,
   SalesPlanCard,
   Settings
 } from "@/types/domain";
@@ -297,7 +302,7 @@ export default function Home() {
     setHarvestCards(sample.harvestCards);
     setProductCards(sample.productCards);
     setSalesPlanCards(sample.salesPlanCards);
-    setSettings({ activeTab: "result", hasSeenIntro: true });
+    setSettings((current) => ({ ...current, activeTab: "result", hasSeenIntro: true }));
   };
 
   const exportJson = () => {
@@ -315,7 +320,7 @@ export default function Home() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `tenokori-sales-plan-v120-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = `tenokori-sales-plan-v130-${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -417,6 +422,8 @@ export default function Home() {
             harvestCards={harvestCards}
             productCards={productCards}
             summary={summary}
+            settings={settings}
+            setSettings={setSettings}
             stockWarnings={summary.stockWarnings}
             openCards={openCards}
             toggleCard={toggleCard}
@@ -642,6 +649,8 @@ function SalesPlanCardsTab({
   harvestCards,
   productCards,
   summary,
+  settings,
+  setSettings,
   stockWarnings,
   openCards,
   toggleCard,
@@ -654,6 +663,8 @@ function SalesPlanCardsTab({
   harvestCards: HarvestCard[];
   productCards: ProductCard[];
   summary: ReturnType<typeof calculateSummary>;
+  settings: Settings;
+  setSettings: React.Dispatch<React.SetStateAction<Settings>>;
   stockWarnings: string[];
   openCards: Record<string, boolean>;
   toggleCard: (id: string) => void;
@@ -827,7 +838,199 @@ function SalesPlanCardsTab({
           </CardShell>
         );
       })}
+      <div className={panelClass}>
+        <label className="flex cursor-pointer items-start gap-3">
+          <input
+            className="mt-1 h-5 w-5 accent-leaf"
+            type="checkbox"
+            checked={settings.showPolicyAllocation}
+            onChange={(event) =>
+              setSettings((current) => ({
+                ...current,
+                showPolicyAllocation: event.target.checked
+              }))
+            }
+          />
+          <span>
+            <span className="block text-base font-black text-stone-950">
+              売り方の方針に合わせて配分案を見る
+            </span>
+            <span className="mt-1 block text-sm font-semibold leading-6 text-stone-600">
+              表示専用の確認候補です。販売計画カードの価格・数量・紐づけは自動では変わりません。
+            </span>
+          </span>
+        </label>
+        {settings.showPolicyAllocation ? (
+          <div className="mt-4 space-y-4">
+            <label className="block">
+              <span className={labelClass}>売り方の方針</span>
+              <select
+                className={inputClass}
+                value={settings.selectedSalesPolicy}
+                onChange={(event) =>
+                  setSettings((current) => ({
+                    ...current,
+                    selectedSalesPolicy: event.target.value as SalesPolicy
+                  }))
+                }
+              >
+                {SALES_POLICY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <PolicyAllocationPanel
+              policy={settings.selectedSalesPolicy}
+              summary={summary}
+            />
+          </div>
+        ) : null}
+      </div>
       <button className={secondaryButton} onClick={() => setActiveTab("result")}>結果へ進む</button>
+    </div>
+  );
+}
+
+function policyTargetMessage(policy: SalesPolicy, shortageYen: number) {
+  const base = `今の販売計画では、目標まで${yen(shortageYen)}足りません。`;
+  const sliderNote =
+    "価格を動かす場合は、販売計画カード内の価格スライダーで確認できます。";
+  if (policy === "awareness") {
+    return `${base} 入口商品の量を確認しながら、日常商品やブランド商品の価格も見直す候補になります。${sliderNote}`;
+  }
+  if (policy === "stable") {
+    return `${base} 日常商品を中心に、販売予定数と価格の両方を確認する候補になります。${sliderNote}`;
+  }
+  if (policy === "profit") {
+    return `${base} 利益商品や日常商品の販売予定数・価格を確認する候補になります。${sliderNote}`;
+  }
+  if (policy === "brand") {
+    return `${base} ブランド商品の見せ方と価格、日常商品の土台を確認する候補になります。${sliderNote}`;
+  }
+  if (policy === "lossReduction") {
+    return `${base} ロス削減商品の出口を確認しつつ、日常商品や入口商品の配分も見る候補になります。${sliderNote}`;
+  }
+  return `${base} 入口・日常・利益・ブランド・ロス削減のバランスを見ながら確認する候補になります。${sliderNote}`;
+}
+
+function PolicyAllocationPanel({
+  policy,
+  summary
+}: {
+  policy: SalesPolicy;
+  summary: ReturnType<typeof calculateSummary>;
+}) {
+  const highRoleLabels = policyRoleLabels(policy, "high");
+  const mediumRoleLabels = policyRoleLabels(policy, "medium");
+  const overageRows = summary.harvestUsage.filter((row) => row.overKg > 0);
+  const surplusRows = summary.harvestUsage
+    .map((row) => ({
+      ...row,
+      surplusKg: Math.max(0, row.harvest.amount - row.usedKg)
+    }))
+    .filter((row) => row.surplusKg > 0);
+  const hasAnyGuidance =
+    overageRows.length > 0 ||
+    surplusRows.length > 0 ||
+    summary.shortageYen > 0 ||
+    summary.compositionWarnings.length > 0;
+
+  return (
+    <div className="space-y-4 rounded-md border border-leaf/20 bg-green-50/50 p-3">
+      <div>
+        <p className="text-sm font-black text-leaf">
+          {SALES_POLICY_LABELS[policy]}の確認候補
+        </p>
+        <p className="mt-1 text-sm font-semibold leading-6 text-stone-700">
+          優先して見たい役割は {highRoleLabels}、次に見たい役割は {mediumRoleLabels} です。
+          ここに出る内容は配分を考えるためのメモで、販売計画を自動変更しません。
+        </p>
+      </div>
+
+      {overageRows.length > 0 ? (
+        <div>
+          <p className="text-sm font-black text-stone-800">在庫超過の調整候補</p>
+          <div className="mt-2 space-y-2">
+            {overageRows.map((usage) => {
+              const candidates = summary.salesResults
+                .filter(
+                  (row) =>
+                    row.canCheckStock &&
+                    row.card.harvestId === usage.harvest.id
+                )
+                .sort((a, b) => {
+                  const roleRank =
+                    productRolePolicyRank(policy, a.card.productRole ?? "unset") -
+                    productRolePolicyRank(policy, b.card.productRole ?? "unset");
+                  if (roleRank !== 0) return roleRank;
+                  const usedGap = b.usedKg - a.usedKg;
+                  if (usedGap !== 0) return usedGap;
+                  return a.salesYen - b.salesYen;
+                })
+                .slice(0, 3);
+              return (
+                <div key={usage.harvest.id} className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-stone-800">
+                  <p className="font-black text-amber-900">
+                    {usage.harvest.name || "取れた量"}は{kg(usage.overKg)}超過しています。
+                  </p>
+                  {candidates.length > 0 ? (
+                    <ul className="mt-2 list-disc space-y-1 pl-5">
+                      {candidates.map((row) => (
+                        <li key={row.card.id}>
+                          {row.card.name}：{PRODUCT_ROLE_LABELS[row.card.productRole ?? "unset"]} / 使用 {kg(row.usedKg)} / 販売見込み {yen(row.takeHomeYen)} を確認候補にできます。
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {surplusRows.length > 0 ? (
+        <div>
+          <p className="text-sm font-black text-stone-800">追加配分の余地</p>
+          <div className="mt-2 space-y-2">
+            {surplusRows.map((usage) => (
+              <p key={usage.harvest.id} className="rounded-md border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-700">
+                {usage.harvest.name || "取れた量"}に{kg(usage.surplusKg)}の余地があります。{highRoleLabels}や{mediumRoleLabels}に近い販売計画へ追加配分できるかを確認できます。
+              </p>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {summary.shortageYen > 0 ? (
+        <div>
+          <p className="text-sm font-black text-stone-800">目標差の確認候補</p>
+          <p className="mt-2 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm font-semibold leading-6 text-stone-700">
+            {policyTargetMessage(policy, summary.shortageYen)}
+          </p>
+        </div>
+      ) : null}
+
+      {summary.compositionWarnings.length > 0 ? (
+        <div>
+          <p className="text-sm font-black text-stone-800">商品構成の確認候補</p>
+          <div className="mt-2 space-y-2">
+            {summary.compositionWarnings.map((message) => (
+              <p key={message} className="rounded-md border border-stone-200 bg-white px-3 py-2 text-sm font-semibold leading-6 text-stone-700">
+                {message} {SALES_POLICY_LABELS[policy]}では、{highRoleLabels}を先に確認すると判断しやすくなります。
+              </p>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {!hasAnyGuidance ? (
+        <p className="rounded-md border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-700">
+          現在の入力では、大きな調整候補は多くありません。方針を変えると別の見方で確認できます。
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -869,6 +1072,9 @@ function ResultTab({
       <div className={panelClass}>
         <p className="text-sm font-bold text-leaf">全体結論</p>
         <h2 className="mt-1 text-2xl font-black text-stone-950">{conclusion}</h2>
+        <p className="mt-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold leading-6 text-stone-700">
+          売り方の方針に合わせた配分案は、販売計画ページで確認できます。配分案は表示専用です。
+        </p>
         <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Metric label="目標手残り" value={yen(summary.targetCashYen)} strong />
           <Metric label="販売見込み額" value={yen(summary.totalTakeHomeYen)} strong />
@@ -957,7 +1163,12 @@ function ResultTab({
         </div>
       </CardShell>
       <CardShell title="データ管理" summary="JSON出力・読み込み、バージョン情報はこちら" isOpen={dataOpen} onToggle={() => setDataOpen(!dataOpen)}>
-        <p className="text-sm text-stone-600">入力内容はこのブラウザに自動保存されます。schemaVersionは5です。</p>
+        <div className="space-y-2 rounded-md border border-stone-200 bg-stone-50 px-3 py-3 text-sm font-semibold leading-6 text-stone-700">
+          <p>入力内容は基本的にこのブラウザ内に保存されます。ブラウザのデータを削除すると、アプリの保存データも消える場合があります。</p>
+          <p>必要なデータは、JSON出力でバックアップしてください。初期化や大きな変更の前にも、必要なデータをJSON出力しておくと安心です。</p>
+          <p>このアプリは販売計画を考えるための補助です。実際の価格・販売数・販売先の判断は、利用者自身で確認してください。</p>
+          <p>現時点の販売見込み額には、費用がすべて反映されていない場合があります。schemaVersionは5です。</p>
+        </div>
         <div className="flex flex-wrap gap-2">
           <button className={primaryButton} onClick={exportJson}>JSON出力</button>
           <label className={secondaryButton}>
@@ -983,7 +1194,7 @@ function buildTextOutput(
   const summary = calculateSummary(plan, harvestCards, productCards, salesPlanCards);
   const productMap = new Map(productCards.map((card) => [card.id, card]));
   const lines = [
-    "農産物販売プランナー v1.2.2",
+    "農産物販売プランナー v1.3.0",
     "",
     `作物名: ${plan.cropName || "未入力"}`,
     `目標手残り: ${yen(plan.targetCashYen)}`,

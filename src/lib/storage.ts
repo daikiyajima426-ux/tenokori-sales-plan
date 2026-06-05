@@ -11,6 +11,7 @@ import type {
   Plan,
   ProductCard,
   ProductRole,
+  SalesPolicy,
   SalesPlanCard,
   Settings
 } from "@/types/domain";
@@ -39,11 +40,46 @@ const productRoles = new Set<ProductRole>([
   "lossReduction",
   "unset"
 ]);
+const salesPolicies = new Set<SalesPolicy>([
+  "balanced",
+  "awareness",
+  "stable",
+  "profit",
+  "brand",
+  "lossReduction"
+]);
 
 function normalizeProductRole(value: unknown): ProductRole {
   return typeof value === "string" && productRoles.has(value as ProductRole)
     ? (value as ProductRole)
     : "unset";
+}
+
+function normalizeSalesPolicy(value: unknown): SalesPolicy {
+  return typeof value === "string" && salesPolicies.has(value as SalesPolicy)
+    ? (value as SalesPolicy)
+    : "balanced";
+}
+
+function normalizeSettings(settings?: Partial<Settings>): Settings {
+  const defaults = createDefaultSettings();
+  if (!settings) return defaults;
+  return {
+    ...defaults,
+    activeTab:
+      typeof settings.activeTab === "string" ? settings.activeTab : defaults.activeTab,
+    hasSeenIntro:
+      typeof settings.hasSeenIntro === "boolean"
+        ? settings.hasSeenIntro
+        : defaults.hasSeenIntro,
+    showPolicyAllocation:
+      typeof settings.showPolicyAllocation === "boolean"
+        ? settings.showPolicyAllocation
+        : defaults.showPolicyAllocation,
+    selectedSalesPolicy: normalizeSalesPolicy(
+      (settings as { selectedSalesPolicy?: unknown }).selectedSalesPolicy
+    )
+  };
 }
 
 function normalizeSalesPlanCard(card: SalesPlanCard): SalesPlanCard {
@@ -59,7 +95,7 @@ function normalizeAppData(data: AppData): AppData {
     schemaVersion: 5,
     plan: { ...data.plan, schemaVersion: SCHEMA_VERSION },
     salesPlanCards: data.salesPlanCards.map(normalizeSalesPlanCard),
-    settings: data.settings ?? createDefaultSettings()
+    settings: normalizeSettings(data.settings)
   };
 }
 
@@ -120,7 +156,7 @@ export function migrateLegacyState(input: {
       harvestCards: (input.harvests ?? []) as HarvestCard[],
       productCards: (input.products ?? []) as ProductCard[],
       salesPlanCards: (input.trials ?? []) as SalesPlanCard[],
-      settings: input.settings ?? createDefaultSettings()
+      settings: normalizeSettings(input.settings)
     });
   }
 
@@ -184,7 +220,7 @@ export function migrateLegacyState(input: {
     harvestCards,
     productCards,
     salesPlanCards,
-    settings: input.settings ?? createDefaultSettings()
+    settings: normalizeSettings(input.settings)
   });
 }
 
